@@ -1,0 +1,282 @@
+/* GiftMind · 全局工具类与页面骨架 */
+
+#app {
+  width: 100%;
+  max-width: var(--app-max-w);
+  margin: 0 auto;
+  background: var(--c-paper);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(120, 92, 74, 0.08);
+}
+
+/* ── 页面容器 ─────────────────────────────── */
+.page {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--c-paper);
+}
+
+.page__body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.page__body::-webkit-scrollbar {
+  display: none;
+}
+
+.page-x {
+  padding-left: var(--page-x);
+  padding-right: var(--page-x);
+}
+
+.safe-bottom {
+  padding-bottom: calc(var(--s-4) + var(--safe-bottom));
+}
+
+/* ── 排版 ─────────────────────────────────── */
+.t-display {
+  font-family: var(--f-display);
+  font-size: var(--fs-display);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+}
+.t-h1 {
+  font-family: var(--f-serif);
+  font-size: var(--fs-h1);
+  font-weight: 500;
+  line-height: 1.35;
+}
+.t-h2 {
+  font-size: var(--fs-h2);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.t-h3 {
+  font-size: var(--fs-h3);
+  font-weight: 500;
+}
+.t-body {
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+}
+.t-sm {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+}
+.t-caption {
+  font-size: var(--fs-caption);
+  color: var(--c-ink-3);
+  line-height: var(--lh-snug);
+}
+.t-eyebrow {
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--c-rose);
+  font-weight: 500;
+}
+.t-serif {
+  font-family: var(--f-serif);
+}
+.t-ink-2 {
+  color: var(--c-ink-2);
+}
+.t-ink-3 {
+  color: var(--c-ink-3);
+}
+.t-center {
+  text-align: center;
+}
+
+/* 段落标题：细线 + 小标签 */
+.section-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  font-size: var(--fs-micro);
+  letter-spacing: var(--ls-wide);
+  color: var(--c-ink-3);
+  text-transform: uppercase;
+  margin-bottom: var(--s-4);
+}
+.section-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--c-line);
+}
+
+/* ── 布局工具 ─────────────────────────────── */
+.row {
+  display: flex;
+  align-items: center;
+}
+.col {
+  display: flex;
+  flex-direction: column;
+}
+.between {
+  justify-content: space-between;
+}
+.center {
+  align-items: center;
+  justify-content: center;
+}
+.wrap {
+  flex-wrap: wrap;
+}
+.grow {
+  flex: 1;
+}
+.gap-1 {
+  gap: var(--s-1);
+}
+.gap-2 {
+  gap: var(--s-2);
+}
+.gap-3 {
+  gap: var(--s-3);
+}
+.gap-4 {
+  gap: var(--s-4);
+}
+.gap-5 {
+  gap: var(--s-5);
+}
+.gap-6 {
+  gap: var(--s-6);
+}
+
+.hairline-top {
+  border-top: 1px solid var(--c-line);
+}
+.hairline-bottom {
+  border-bottom: 1px solid var(--c-line);
+}
+
+/* ── 纸纹 / 光晕装饰 ──────────────────────── */
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+/* ── 通用动画 ─────────────────────────────── */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+
+.anim-up {
+  animation: fadeUp var(--t-slow) var(--e-out) both;
+}
+.anim-in {
+  animation: fadeIn var(--t-slow) var(--e-out) both;
+}
+.d-1 {
+  animation-delay: 0.06s;
+}
+.d-2 {
+  animation-delay: 0.12s;
+}
+.d-3 {
+  animation-delay: 0.18s;
+}
+.d-4 {
+  animation-delay: 0.24s;
+}
+.d-5 {
+  animation-delay: 0.3s;
+}
+.d-6 {
+  animation-delay: 0.36s;
+}
+
+/* ── 路由转场 ─────────────────────────────── */
+.rt-enter-active,
+.rt-leave-active {
+  transition: opacity var(--t-base) var(--e-out), transform var(--t-base) var(--e-out);
+}
+.rt-enter-from {
+  opacity: 0;
+  transform: translateX(18px);
+}
+.rt-leave-to {
+  opacity: 0;
+  transform: translateX(-12px);
+}
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity var(--t-base) var(--e-out);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* 点击反馈 */
+.tap {
+  transition: transform var(--t-fast) var(--e-out), opacity var(--t-fast);
+}
+.tap:active {
+  transform: scale(0.97);
+  opacity: 0.88;
+}

@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+.DS_Store
+*.local
+.env
+.env.production
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+.walkthrough
+dist-single
