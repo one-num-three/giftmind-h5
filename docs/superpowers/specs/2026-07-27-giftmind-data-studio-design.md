@@ -85,7 +85,7 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 ### 5.1 团队口令
 
 - 不建立个人用户表。
-- 首次部署通过服务器 `.env` 的 `TEAM_PASSCODE` 设置共用口令；该值不进入前端、日志、导出或 Git。
+- 首次部署通过服务器 `.env` 加载的环境变量 `TEAM_PASSCODE` 设置共用口令；该值不进入前端、日志、导出或 Git。
 - 登录成功后签发有过期时间的 HttpOnly、SameSite=Strict 会话 Cookie。
 - HTTPS 环境下 Cookie 必须启用 Secure。
 - 会话固定有效期为 7 天。
@@ -521,7 +521,7 @@ AI 可以提示这些字段尚待人工核验，但不能编造值。
 
 ### 9.5 Key 管理
 
-DeepSeek Key 只读取服务器 `.env` 中的 `DEEPSEEK_API_KEY`。前端只获得“已配置 / 未配置”和模型名称，不能保存、查看、下载或导出 Key。服务器 `APP_SECRET` 只用于签名团队会话 Cookie。
+DeepSeek Key 只读取服务器 `.env` 加载的 `DEEPSEEK_API_KEY` 环境变量。前端只获得“已配置 / 未配置”和模型名称，不能保存、查看、下载或导出 Key。服务器 `APP_SECRET` 只用于签名团队会话 Cookie。
 
 ## 10. 数据质量规则
 

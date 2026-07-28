@@ -14,7 +14,7 @@
 - The first release supports exactly two active top-level gift types: `product` and `activity`.
 - `physical`/`digital`/`hybrid`, `offline`/`online`/`hybrid`, customization, and bundle status are independent dimensions.
 - No personal accounts, roles, invitations, payment, public API, scraping, live inventory, or live ticket scheduling.
-- A shared `TEAM_PASSCODE` in server `.env` creates a fixed 7-day HttpOnly, SameSite=Strict session cookie; HTTPS cookies are Secure.
+- A non-empty shared `TEAM_PASSCODE`, loaded from server `.env` into the server process environment, creates a fixed 7-day HttpOnly, SameSite=Strict session cookie; HTTPS cookies are Secure. `APP_SECRET` must also be non-empty.
 - All data and AI endpoints require a valid team session; the first release has no CSRF token, login rate limit, server-side session revocation, user table, or admin role.
 - DeepSeek suggestions never write to the database until a collector confirms fields and saves.
 - `DEEPSEEK_API_KEY` exists only in server `.env`; the web UI never saves, displays, or exports it.
@@ -409,7 +409,7 @@ Expected: requests return 404 because session routes are absent.
 
 - [ ] **Step 3: Implement passcode verification and signed sessions**
 
-Compare the submitted passcode with server-side `TEAM_PASSCODE` using `secrets.compare_digest`. Sign a compact session payload with `itsdangerous.URLSafeTimedSerializer`; it contains only a random session ID and issue time. No session table, revocation table, or login-rate-limit store is required.
+Compare the submitted passcode with server-side `TEAM_PASSCODE` using `secrets.compare_digest`. Reject blank `TEAM_PASSCODE` and `APP_SECRET` during configuration validation. Sign a compact session payload with `itsdangerous.URLSafeTimedSerializer`; it contains only a random session ID and issue time. No session table, revocation table, or login-rate-limit store is required.
 
 The login response schema is:
 
