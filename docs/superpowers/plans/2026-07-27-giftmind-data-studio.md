@@ -1306,7 +1306,7 @@ Expected: export service import fails.
 
 - [ ] **Step 3: Implement all exports and templates**
 
-CSV is a documented flattened summary, not a lossless format. Excel contains the exact nine sheets and a hidden metadata sheet with schema version. Internal JSON is lossless; GiftMind JSON applies the approved five-category compatibility mapping and excludes inactive/deleted gifts.
+CSV is a documented flattened summary, not a lossless format. Excel contains exactly the approved nine sheets; write the schema version and application version to workbook document properties rather than creating a tenth metadata sheet. Internal JSON is lossless; GiftMind JSON applies the approved five-category compatibility mapping and excludes inactive/deleted gifts.
 
 - [ ] **Step 4: Write failing import preview and transaction tests**
 
