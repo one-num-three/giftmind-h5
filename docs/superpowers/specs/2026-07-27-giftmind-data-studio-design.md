@@ -57,7 +57,6 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 - 数据库：SQLite，开启 WAL、外键和定期完整性检查。
 - 图片：服务器本地持久化目录，Pillow 转换 WebP。
 - Excel：OpenPyXL。
-- 加密：`cryptography` 的 Fernet。
 - 测试：Pytest、Vitest、Playwright。
 - 部署：Docker Compose 单应用容器；FastAPI 同时提供 API 和构建后的前端静态文件。
 - 外层入口：现有 Nginx 反向代理，支持独立域名或 `/giftmind-data/` 子路径。
@@ -86,20 +85,17 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 ### 5.1 团队口令
 
 - 不建立个人用户表。
-- 首次部署通过环境变量设置团队口令。
-- 服务端只保存 Argon2 哈希，不保存明文。
-- 登录成功后签发有过期时间的 HttpOnly、SameSite=Lax 会话 Cookie。
+- 首次部署通过服务器 `.env` 的 `TEAM_PASSCODE` 设置共用口令；该值不进入前端、日志、导出或 Git。
+- 登录成功后签发有过期时间的 HttpOnly、SameSite=Strict 会话 Cookie。
 - HTTPS 环境下 Cookie 必须启用 Secure。
-- 默认会话有效期为 7 天，设置页可调整为 1–30 天。
-- 登录失败限制为同一 IP 每 15 分钟 5 次。
+- 会话固定有效期为 7 天。
 - 所有修改、导入、导出、备份、设置和 AI 接口必须校验会话。
-- 登出会立即使当前会话失效。
+- 登出只清除当前浏览器 Cookie；本项目不维护服务器端会话撤销表。
+- 需要修改口令时，在服务器 `.env` 更新 `TEAM_PASSCODE` 后重启容器。
 
-### 5.2 基础防护
+### 5.2 必要的运行保护
 
-- 所有状态修改请求校验 CSRF Token。
 - 接口限制请求体大小。
-- AI 接口默认每个会话每小时最多 60 次，可配置。
 - 上传只接受 JPEG、PNG、WebP 和 HEIC 解码后的有效图片。
 - 文件扩展名不能作为格式判断依据，必须解码验证。
 - 随机生成存储文件名，禁止用户控制路径。
@@ -109,7 +105,7 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 
 ### 5.3 HTTPS 要求
 
-应用本身保持主机名无关。正式供外部网络访问前，Nginx 必须启用 HTTPS。没有 HTTPS 时，系统设置页显示持续警告，并禁止通过网页保存新的 DeepSeek Key；环境变量中的 Key 仍可由服务器使用。
+应用本身保持主机名无关。正式供外部网络访问前，Nginx 必须启用 HTTPS。DeepSeek Key 只由服务器 `.env` 提供，网页没有保存或编辑 Key 的入口。
 
 ## 6. 页面与交互
 
@@ -192,15 +188,10 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 
 ### 6.7 系统设置
 
-- DeepSeek 连接状态、模型、Base URL、超时、重试和每小时限额。
-- API Key 来源状态：环境变量或网页设置。
-- 网页只能显示 Key 是否存在和末尾 4 位，不能读取完整 Key。
-- 环境变量 Key 优先；存在时网页 Key 不生效。
+- DeepSeek 连接状态、模型、Base URL、超时和重试状态；这些值由服务器 `.env` 配置，网页只读展示。
 - 数据字典管理：新增、停用、排序自定义选项；内置核心值不可删除，只能停用。
 - 自定义字段管理：设置机器键、中文名称、适用类型、数据类型、是否多值、帮助文案、校验、AI 策略和显示顺序。
 - 已产生数据的自定义字段不能直接删除，只能停用或进入废弃流程。
-- 团队口令修改。
-- 会话有效期。
 - 图片限制。
 - 手动备份、备份列表和恢复入口。
 
@@ -383,12 +374,11 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 - `dimension_options`：标准和自定义数据字典。
 - `custom_field_definitions`：自定义字段的机器键、名称、范围、类型、校验、AI 策略、状态和版本。
 - `gift_custom_field_values`：按礼物和字段定义保存经过校验的扩展值，值使用 JSON 表达但由字段定义约束。
-- `settings`：非敏感设置和加密后的网页 DeepSeek Key。
+- `settings`：非敏感的界面与数据维护设置；不保存 DeepSeek Key 或团队口令。
 - `ai_runs`：模型、耗时、成功状态、Token 用量、错误类型，不保存明文 Key。
 - `audit_events`：创建、修改、复制、删除、恢复、导入、导出、设置和备份事件。
 - `imports`：导入文件、统计和错误报告。
 - `backups`：备份文件、大小、校验值和创建时间。
-- `revoked_sessions`：已退出或失效的会话标识。
 
 礼物详情 API 使用带 `gift_type_code` 判别字段的联合结构：共用字段始终存在，`product` 只接受 `product_details`，`activity` 只接受 `activity_details`。错误类型的专属字段不能静默丢弃。
 
@@ -470,7 +460,7 @@ GiftMind 当前使用 `mock/giftLibrary.js` 中的静态礼物素材完成演示
 
 服务端流程：
 
-1. 校验会话和调用频率。
+1. 校验团队会话。
 2. 执行本地重复检查。
 3. 首先请求 DeepSeek 判断 `product` 或 `activity`，同时返回置信度、判断理由和最多两个候选解释。
 4. 前端要求采集者确认一级类型。像“手作对戒”这类既可能是购买成品、也可能是到店制作体验的名称，不能由 AI 静默决定。
@@ -531,12 +521,7 @@ AI 可以提示这些字段尚待人工核验，但不能编造值。
 
 ### 9.5 Key 管理
 
-读取优先级：
-
-1. `DEEPSEEK_API_KEY` 环境变量。
-2. 网页设置中加密保存的 Key。
-
-网页 Key 使用由 `APP_SECRET` 派生的 Fernet Key 加密。`APP_SECRET` 只能存在服务器环境变量。若 `APP_SECRET` 缺失，网页禁止保存 Key。API 响应永远不返回完整 Key。
+DeepSeek Key 只读取服务器 `.env` 中的 `DEEPSEEK_API_KEY`。前端只获得“已配置 / 未配置”和模型名称，不能保存、查看、下载或导出 Key。服务器 `APP_SECRET` 只用于签名团队会话 Cookie。
 
 ## 10. 数据质量规则
 
@@ -716,14 +701,14 @@ GiftMind 消费格式保持现有匹配器需要的核心字段：
 
 后端测试：
 
-- 口令、会话、退出、限流和 CSRF。
+- 口令、会话、退出、7 天过期和受保护接口拒绝未登录访问。
 - 礼物 CRUD、复制、软删除、恢复和彻底删除。
 - 商品/活动判别联合结构和错误类型字段拒绝。
 - 商品字段、活动字段、组合关系、完整度和跨字段冲突规则。
 - 商品渠道、活动渠道、图片和重复文件。
 - 自定义字段定义、类型校验、停用、废弃和核心字段迁移。
 - `schema_version` 迁移、前一版本导入和未知未来字段往返保留。
-- DeepSeek 结构化输出、错误、超时和 Key 优先级。
+- DeepSeek 结构化输出、错误、超时和仅环境变量 Key 配置。
 - JSON、CSV、Excel 导入导出。
 - 备份、校验、恢复和失败回滚。
 

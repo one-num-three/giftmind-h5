@@ -6,7 +6,7 @@
 
 **Architecture:** Create a new repository named `giftmind-data-studio`. A Vue 3 single-page application calls a FastAPI service under `/api`; FastAPI owns all validation, DeepSeek access, image processing, imports, exports, and backups. SQLAlchemy stores shared gift data plus one-to-one product or activity details in SQLite WAL mode, while controlled custom fields handle early-stage schema experiments without weakening the core model.
 
-**Tech Stack:** Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2 async, Alembic, SQLite, Argon2, Pillow, OpenPyXL, HTTPX, Pytest, Vue 3, TypeScript, Vite, Pinia, Vue Router, Vitest, Playwright, Docker Compose, Nginx.
+**Tech Stack:** Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2 async, Alembic, SQLite, itsdangerous, Pillow, OpenPyXL, HTTPX, Pytest, Vue 3, TypeScript, Vite, Pinia, Vue Router, Vitest, Playwright, Docker Compose, Nginx.
 
 ## Global Constraints
 
@@ -14,10 +14,10 @@
 - The first release supports exactly two active top-level gift types: `product` and `activity`.
 - `physical`/`digital`/`hybrid`, `offline`/`online`/`hybrid`, customization, and bundle status are independent dimensions.
 - No personal accounts, roles, invitations, payment, public API, scraping, live inventory, or live ticket scheduling.
-- A shared team passcode creates a 7-day HttpOnly, SameSite=Lax session cookie; HTTPS cookies are Secure.
-- All state-changing endpoints require a valid session and CSRF token.
+- A shared `TEAM_PASSCODE` in server `.env` creates a fixed 7-day HttpOnly, SameSite=Strict session cookie; HTTPS cookies are Secure.
+- All data and AI endpoints require a valid team session; the first release has no CSRF token, login rate limit, server-side session revocation, user table, or admin role.
 - DeepSeek suggestions never write to the database until a collector confirms fields and saves.
-- `DEEPSEEK_API_KEY` takes precedence over a web-saved encrypted key.
+- `DEEPSEEK_API_KEY` exists only in server `.env`; the web UI never saves, displays, or exports it.
 - Uploaded images are decoded, randomly named, converted to WebP derivatives, and limited to 10 MB each and 8 per gift.
 - SQLite runs with WAL, foreign keys, integrity checks, migrations, and persistent storage outside the container image.
 - Full backups exclude plaintext passcodes and DeepSeek keys.
@@ -285,7 +285,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     app_secret: str
-    team_passcode_hash: str
+    team_passcode: str
     database_url: str = "sqlite+aiosqlite:///./data/giftmind.sqlite3"
     data_dir: Path = Path("./data")
     upload_dir: Path = Path("./uploads")
@@ -363,26 +363,23 @@ git commit -m "chore: bootstrap GiftMind data studio"
 
 ---
 
-### Task 2: Add Shared-Passcode Sessions and Request Protection
+### Task 2: Add Lightweight Shared-Passcode Sessions
 
 **Files:**
 - Create: `backend/app/core/security.py`
-- Create: `backend/app/models/operations.py`
 - Create: `backend/app/schemas/session.py`
 - Create: `backend/app/api/deps.py`
 - Create: `backend/app/api/routes/session.py`
 - Create: `backend/app/api/router.py`
 - Modify: `backend/app/main.py`
 - Create: `tests/api/test_session.py`
-- Create: `tests/api/test_csrf.py`
 
 **Interfaces:**
-- Produces: `hash_passcode(raw: str) -> str`, `verify_passcode(raw: str, encoded: str) -> bool`.
 - Produces: `create_session_token(session_id: UUID, expires_at: datetime, secret: str) -> str`.
-- Produces: `require_session(request) -> SessionContext` and `require_csrf(request, session) -> None`.
+- Produces: `require_session(request) -> SessionContext`.
 - Produces: `POST /api/session/login`, `POST /api/session/logout`, `GET /api/session`.
 
-- [ ] **Step 1: Write failing login, lockout, cookie, logout, and CSRF tests**
+- [ ] **Step 1: Write failing login, cookie, expiry, logout, and protected-route tests**
 
 Use this core assertion pattern:
 
@@ -390,63 +387,59 @@ Use this core assertion pattern:
 def test_login_sets_http_only_cookie(client):
     response = client.post("/api/session/login", json={"passcode": "team-secret"})
     assert response.status_code == 200
-    assert response.json()["csrfToken"]
     assert "HttpOnly" in response.headers["set-cookie"]
-    assert "SameSite=lax" in response.headers["set-cookie"]
+    assert "SameSite=strict" in response.headers["set-cookie"]
 
 
-def test_sixth_bad_login_is_rate_limited(client):
-    for _ in range(5):
-        assert client.post("/api/session/login", json={"passcode": "wrong"}).status_code == 401
-    assert client.post("/api/session/login", json={"passcode": "wrong"}).status_code == 429
+def test_wrong_passcode_is_rejected(client):
+    assert client.post("/api/session/login", json={"passcode": "wrong"}).status_code == 401
 ```
 
-Add a protected test-only endpoint during testing and assert missing or wrong `X-CSRF-Token` returns 403.
+Add a protected test-only endpoint and assert a missing, malformed, or expired cookie returns 401.
 
 - [ ] **Step 2: Run the security tests and verify 404 failures**
 
 Run:
 
 ```powershell
-python -m pytest tests/api/test_session.py tests/api/test_csrf.py -v
+python -m pytest tests/api/test_session.py -v
 ```
 
 Expected: requests return 404 because session routes are absent.
 
 - [ ] **Step 3: Implement passcode verification and signed sessions**
 
-Use Argon2 for the passcode hash. Sign a compact session payload with `itsdangerous.URLSafeTimedSerializer`; persist revoked session IDs in `revoked_sessions`. Store failed-login counters by normalized IP with a 15-minute rolling window and reject attempt 6 through the end of the window.
+Compare the submitted passcode with server-side `TEAM_PASSCODE` using `secrets.compare_digest`. Sign a compact session payload with `itsdangerous.URLSafeTimedSerializer`; it contains only a random session ID and issue time. No session table, revocation table, or login-rate-limit store is required.
 
 The login response schema is:
 
 ```python
 class SessionResponse(BaseModel):
     authenticated: Literal[True]
-    csrf_token: str = Field(alias="csrfToken")
     expires_at: datetime = Field(alias="expiresAt")
 ```
 
-The cookie name is `giftmind_session`. Set `Secure` when the request is HTTPS or `X-Forwarded-Proto` is `https`.
+The cookie name is `giftmind_session`. Set `SameSite=Strict`; set `Secure` when the request is HTTPS or `X-Forwarded-Proto` is `https`.
 
-- [ ] **Step 4: Add CSRF protection and router integration**
+- [ ] **Step 4: Add session dependency and router integration**
 
-Require the `X-CSRF-Token` header on `POST`, `PUT`, `PATCH`, and `DELETE`, except login. Compare it with the token stored in the signed session using `secrets.compare_digest`.
+Require a valid signed session for all data, image, AI, import/export, backup, and settings routes. Logout deletes the browser cookie; it does not record server-side revocation.
 
 - [ ] **Step 5: Run focused security tests**
 
 Run:
 
 ```powershell
-python -m pytest tests/api/test_session.py tests/api/test_csrf.py -v
+python -m pytest tests/api/test_session.py -v
 ```
 
-Expected: all session, rate-limit, cookie, logout, and CSRF cases pass.
+Expected: all login, cookie, expiry, logout, and protected-route cases pass.
 
 - [ ] **Step 6: Commit session security**
 
 ```powershell
-git add backend tests/api/test_session.py tests/api/test_csrf.py
-git commit -m "feat: add protected team sessions"
+git add backend tests/api/test_session.py
+git commit -m "feat: add lightweight team sessions"
 ```
 
 ---
@@ -694,7 +687,7 @@ git commit -m "feat: add typed gift collection workflow"
 - Create: `frontend/src/views/__tests__/LoginView.test.ts`
 
 **Interfaces:**
-- Produces: `apiRequest<T>(path, options) -> Promise<T>` with cookies and CSRF.
+- Produces: `apiRequest<T>(path, options) -> Promise<T>` with cookies.
 - Produces Pinia session actions: `restore()`, `login(passcode)`, `logout()`.
 - Produces authenticated route guard and responsive application shell.
 
@@ -704,7 +697,6 @@ git commit -m "feat: add typed gift collection workflow"
 it('logs in with one passcode field and redirects', async () => {
   mockApi.post('/api/session/login', {
     authenticated: true,
-    csrfToken: 'csrf-1',
     expiresAt: '2026-08-03T00:00:00Z',
   })
   const wrapper = mountLogin()
@@ -725,7 +717,7 @@ Expected: module resolution fails for `LoginView.vue`.
 
 - [ ] **Step 3: Implement the API client and session store**
 
-Store the CSRF token only in Pinia memory. Send it as `X-CSRF-Token` on mutations. On 401, clear session state and redirect to login; on 403 CSRF failure, call `restore()` once and retry the original request once.
+Send requests with cookies. On 401, clear session state and redirect to login. No CSRF token storage or retry logic is required in the first release.
 
 - [ ] **Step 4: Implement the approved visual shell**
 
@@ -1137,9 +1129,9 @@ The classification prompt receives only name, description, current confirmed fie
 
 Mark merchant, brand, SKU, provider, current price, stock, URL, city, venue, coordinates, opening hours, schedule, policies, sources, verification, and image rights as prohibited facts. Strip and report these if returned.
 
-- [ ] **Step 4: Add protected API orchestration and rate limit**
+- [ ] **Step 4: Add protected API orchestration**
 
-`stage="auto"` classifies first unless `confirmedGiftType` is supplied. If classification confidence is below 0.75 or candidates are close, return `needsTypeConfirmation: true` and do not run enrichment. Enforce 60 calls per session per hour by default.
+`stage="auto"` classifies first unless `confirmedGiftType` is supplied. If classification confidence is below 0.75 or candidates are close, return `needsTypeConfirmation: true` and do not run enrichment. The first release does not enforce an AI rate limit.
 
 - [ ] **Step 5: Write and run failing frontend suggestion tests**
 
@@ -1340,7 +1332,7 @@ git commit -m "feat: add versioned data import and export"
 
 ---
 
-### Task 12: Add Settings, Encrypted DeepSeek Key, Backup, and Restore
+### Task 12: Add Read-Only DeepSeek Status, Backup, and Restore
 
 **Files:**
 - Create: `backend/app/schemas/settings.py`
@@ -1357,13 +1349,12 @@ git commit -m "feat: add versioned data import and export"
 - Create: `frontend/src/views/__tests__/SettingsView.test.ts`
 
 **Interfaces:**
-- Produces: `encrypt_secret`, `decrypt_secret`, and masked key status.
 - Produces: `create_backup() -> BackupManifest`, `restore_backup(path, passcode) -> RestoreResult`.
 - Produces settings and backup endpoints from the approved API.
 
-- [ ] **Step 1: Write failing key-precedence and masking tests**
+- [ ] **Step 1: Write failing DeepSeek environment-status tests**
 
-Assert environment key wins, web responses expose only presence and final four characters, full keys never appear in logs or exports, and web key saving is forbidden without HTTPS or `APP_SECRET`.
+Assert the settings response exposes only DeepSeek configured/unconfigured state, model, Base URL, timeout, and retry values from server `.env`; it never exposes a key field and has no endpoint that accepts a Key.
 
 - [ ] **Step 2: Write failing backup atomicity tests**
 
@@ -1377,19 +1368,19 @@ python -m pytest tests/services/test_backups.py tests/api/test_settings.py tests
 
 Expected: imports or routes fail.
 
-- [ ] **Step 4: Implement encrypted settings**
+- [ ] **Step 4: Implement read-only DeepSeek settings**
 
-Derive a Fernet key from `APP_SECRET` with HKDF and a fixed application salt. Never return ciphertext or the full key. Store model, base URL, 45-second timeout, one retry, hourly limit, session duration, and image limits as validated settings.
+Read DeepSeek Key, model, Base URL, 45-second timeout, and one retry from server `.env`. Return only `configured`, model, Base URL, timeout, and retry through settings. Store only non-secret interface, image, and data-maintenance settings in SQLite.
 
 - [ ] **Step 5: Implement atomic backup and restore**
 
-Before backup, run WAL checkpoint and `PRAGMA integrity_check`. ZIP the database, originals, derivatives, non-secret settings manifest, schema/application versions, and per-file SHA-256 checksums. Exclude passcode hash, session tokens, encrypted DeepSeek key, and plaintext key.
+Before backup, run WAL checkpoint and `PRAGMA integrity_check`. ZIP the database, originals, derivatives, non-secret settings manifest, schema/application versions, and per-file SHA-256 checksums. Exclude `TEAM_PASSCODE`, `APP_SECRET`, session cookies, and `DEEPSEEK_API_KEY`.
 
 Before restore, verify structure, version, and every checksum; create a pre-restore backup; extract to a sibling temporary directory; then atomically swap persistent paths. On failure, leave the original paths untouched.
 
 - [ ] **Step 6: Implement settings and backup UI**
 
-Show environment/web key source, masked suffix, HTTPS warning, model and limits, manual backup, backup list, download, and restore. Restore requires re-entering the team passcode plus a second confirmation naming the backup timestamp.
+Show DeepSeek enabled/disabled state and read-only model configuration, manual backup, backup list, download, and restore. Restore requires the shared team passcode plus a second confirmation naming the backup timestamp.
 
 - [ ] **Step 7: Run settings and backup tests**
 
@@ -1400,13 +1391,13 @@ npm run test -- SettingsView
 npm run typecheck
 ```
 
-Expected: key security, backup, corruption, rollback, and UI tests pass.
+Expected: environment-only Key status, backup, corruption, rollback, and UI tests pass.
 
 - [ ] **Step 8: Commit operations**
 
 ```powershell
 git add backend scripts tests frontend/src
-git commit -m "feat: add secure settings and backups"
+git commit -m "feat: add settings and backups"
 ```
 
 ---
@@ -1492,8 +1483,8 @@ Add a deny rule for hidden files and never expose `/data`, `/uploads/original`, 
 Document:
 
 1. Create `/srv/giftmind-data/{data,uploads/original,uploads/large,uploads/thumb,backups,logs}`.
-2. Generate `APP_SECRET` and Argon2 team-passcode hash.
-3. Optionally set `DEEPSEEK_API_KEY`.
+2. Set `APP_SECRET`, `TEAM_PASSCODE`, and optionally `DEEPSEEK_API_KEY` in the server `.env`.
+3. Set optional DeepSeek model, Base URL, timeout, and retry environment values.
 4. Build and start Compose.
 5. Install the Nginx configuration and HTTPS certificate.
 6. Run migrations and health check.
