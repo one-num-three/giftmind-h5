@@ -20,6 +20,15 @@ npm run build      # 产物在 dist/，纯静态，丢 OSS / CDN / Nginx 都能�
 npm run preview    # 本地预览构建产物
 ```
 
+## Data Studio 设计资料
+
+GiftMind 数据工作台的产品约束与落地计划保存在仓库中，便于后续实现和审阅：
+
+- [设计规格](./docs/superpowers/specs/2026-07-27-giftmind-data-studio-design.md)
+- [实施计划](./docs/superpowers/plans/2026-07-27-giftmind-data-studio.md)
+
+数据工作台是独立的本地管理应用；本 H5 项目继续保持 Mock 优先，不会在默认体验中要求后端服务。
+
 ---
 
 ## 它包含什么
