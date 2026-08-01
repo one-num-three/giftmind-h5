@@ -46,14 +46,17 @@ giftmind-h5/
 ├─ .env.example               环境变量说明
 ├─ docs/
 │  ├─ DESIGN_CONTRACT.md      ★ 开发契约：token / 组件 / store / 数据结构 / 红线
-│  └─ INTEGRATION.md          ★ 怎么接真实 LLM 与后端
+│  ├─ INTEGRATION.md          ★ 怎么接真实 LLM 与后端
+│  └─ DATA_MODEL.md           ★ 商品 / 活动 / 报价 / 变体的数据契约
 ├─ mock/
 │  ├─ giftLibrary.js          101 条礼物知识库 + 信件/仪式/洞察素材库
+│  ├─ catalog.js              标准化目录出口、搜索与校验
 │  ├─ planGenerator.js        「假 AI」：加权打分匹配 + 信件合成（确定性可复现）
 │  └─ generatingSteps.js      生成过场的阶段文案
 ├─ scripts/
 │  └─ walkthrough.mjs         Playwright 全流程走查 + 逐屏截图
 └─ src/
+   ├─ data/catalogSchema.js   礼物目录字段、类型和数据质量规则
    ├─ api/
    │  ├─ index.js             ★ 唯一出口，Mock / 真实后端一行切换
    │  ├─ mockAdapter.js       Mock 实现
@@ -112,6 +115,18 @@ VITE_API_BASE_URL=https://your-gateway/api
 
 后端实现 6 个接口即可，前端一行不用改。详见 **[docs/INTEGRATION.md](docs/INTEGRATION.md)**。
 
+## 数据层：先把“礼物想法”和真实报价分开
+
+`mock/giftLibrary.js` 仍保留 101 条适合演示的礼物素材，但现在会统一扩展为目录记录：
+
+- `kind` 区分 `product` 商品和 `activity` 活动；`category` 保留中文展示分类，`format` 提供稳定的程序枚举。
+- `pricing`、`planning`、`acquisition` 描述价格口径、准备时间、购买 / 预约和履约方式。
+- `fit`、`constraints` 承载推荐所需的对象、场合、性格、标签、禁忌和前置条件。
+- `offers[]` 预留真实平台 / 商家 / 活动场次，`variants[]` 预留颜色、尺寸、套餐和人数差异。
+- `evidence`、`quality`、`dataStatus` 明确哪些只是编辑素材，哪些已经有来源并经过人工核验。
+
+完整字段说明见 **[docs/DATA_MODEL.md](docs/DATA_MODEL.md)**。接入后台时优先写入 `gift_idea`，解析链接和图片时再补 `offers[]` / `variants[]`，不要覆盖原始推荐素材。
+
 ---
 
 ## 移动端适配
@@ -130,6 +145,7 @@ VITE_API_BASE_URL=https://your-gateway/api
 npm run build                                  # 构建
 npx vite preview --port 4173                   # 起服务
 node scripts/walkthrough.mjs                   # 全流程走查，截图落在 .walkthrough/
+npm run catalog:check                           # 校验目录字段、类型和唯一 id
 ```
 
 `walkthrough.mjs` 会用 Playwright 以 iPhone 尺寸自动跑完整条链路（含填写文本题、拆信封、

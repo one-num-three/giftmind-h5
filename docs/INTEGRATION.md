@@ -95,9 +95,10 @@ answers → buildPlanPrompt → LLM(JSON mode, schema=PLAN_SCHEMA)
        → 落库 → 返回 Plan
 ```
 
-**注意**：模型直出的礼物名可能买不到。建议服务端保留一份真实商品库（本仓库
-`mock/giftLibrary.js` 的结构可以直接当 schema 用），让模型从库里挑而不是自由发挥，
-或者让模型自由发挥后再做一次向量检索对齐到真实 SKU。
+**注意**：模型直出的礼物名可能买不到。建议服务端保留一份真实目录，让模型只返回
+目录里的 `catalogId`，再由服务端把对应的 `gift_idea`、`offers[]` 和 `variants[]`
+拼回方案。本仓库的目录契约见 [`docs/DATA_MODEL.md`](DATA_MODEL.md)，Mock 数据的
+标准化入口是 `mock/catalog.js`。不要让模型自由生成商品链接、库存或实时价格。
 
 ---
 
@@ -113,7 +114,8 @@ answers → buildPlanPrompt → LLM(JSON mode, schema=PLAN_SCHEMA)
   subtitle,
   insight: { summary, traits: string[], keyPoint },
   gifts: [{
-    id, emoji, name, why, price, category,   // category: 实物|体验|定制|数字|组合
+    id, catalogId, emoji, name, why, price, category,
+    kind, format,                            // product | activity
     tags: string[], matchScore: number,      // 0-100
     tip, leadTime
   }],

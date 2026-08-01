@@ -4,8 +4,10 @@
  */
 import { chromium } from 'playwright'
 import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const OUT = new URL('../.walkthrough/', import.meta.url).pathname
+const OUT = fileURLToPath(new URL('../.walkthrough/', import.meta.url))
 mkdirSync(OUT, { recursive: true })
 
 const BASE = process.env.BASE_URL || 'http://localhost:4173'
@@ -16,7 +18,7 @@ let shot = 0
 async function snap(page, name, full = false) {
   shot += 1
   await page.screenshot({
-    path: `${OUT}${String(shot).padStart(2, '0')}-${name}.png`,
+    path: join(OUT, `${String(shot).padStart(2, '0')}-${name}.png`),
     fullPage: full,
   })
 }

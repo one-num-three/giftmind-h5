@@ -13,6 +13,7 @@ export const SYSTEM_PROMPT = `你是 GiftMind 的首席送礼策划师。你的�
 4. 尊重禁忌：用户明确说不要的，一次都不要出现。
 5. 考虑时间：距离送出时间不足一周时，不推荐需要长时间制作的定制品，或必须给出加急方案。
 6. 不煽情过头：文案克制、真诚，不要用力过猛的排比和感叹号。中文写作，语气像一个懂事的朋友。
+7. 如果服务端提供了礼物目录，只能从目录里的 id 选择，不得虚构商品、商家、链接、库存或价格；价格和可获得性以目录报价为准。
 
 你必须严格输出 JSON，不要输出任何 JSON 之外的内容。`
 
@@ -40,11 +41,14 @@ export const PLAN_SCHEMA = {
         type: 'object',
         required: ['name', 'why', 'price', 'category'],
         properties: {
+          catalogId: { type: 'string', description: '服务端目录中的 gift_idea id，不得自行编造' },
           emoji: { type: 'string' },
           name: { type: 'string', description: '礼物名，越具体越好' },
           why: { type: 'string', description: '为什么是它，扣住用户提供的故事，50-80 字' },
           price: { type: 'string', description: '价格区间文案，如 ¥180–360' },
           category: { type: 'string', enum: ['实物', '体验', '定制', '数字', '组合'] },
+          kind: { type: 'string', enum: ['product', 'activity'], description: '商品或活动一级类型' },
+          format: { type: 'string', description: '目录中的机器分类，如 physical_product / activity' },
           tags: { type: 'array', items: { type: 'string' } },
           matchScore: { type: 'number', description: '0-100 契合度' },
           tip: { type: 'string', description: '购买 / 制作的实操建议' },

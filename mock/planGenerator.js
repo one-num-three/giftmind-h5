@@ -17,7 +17,6 @@
 
 import { seededRandom, pickN, parseBudget, toArray } from '../src/utils/helpers.js'
 import {
-  GIFT_LIBRARY,
   LETTER_TEMPLATES,
   RITUAL_LIBRARY,
   INSIGHT_PHRASES,
@@ -39,6 +38,7 @@ import {
   TIMINGS,
   TABOOS,
 } from './giftLibrary.js'
+import { GIFT_CATALOG } from './catalog.js'
 
 /* ══════════════════════════════════════════════════════════════
  *  1. 基础工具
@@ -324,7 +324,7 @@ function scoreGift(gift, ctx, jitter) {
 function scoreAll(ctx, seed) {
   const jitter = seededRandom(`${seed}|score`)
   const scored = []
-  for (const gift of GIFT_LIBRARY) {
+  for (const gift of GIFT_CATALOG) {
     const raw = scoreGift(gift, ctx, jitter)
     if (raw === null) continue
     scored.push({ gift, raw })
@@ -332,7 +332,7 @@ function scoreAll(ctx, seed) {
   // 极端情况下（禁忌把库清空）退回全库，保证永远有输出
   if (scored.length < 3) {
     const fallbackJitter = seededRandom(`${seed}|fallback`)
-    return GIFT_LIBRARY.map((gift) => ({ gift, raw: (fallbackJitter() - 0.5) * 6 }))
+    return GIFT_CATALOG.map((gift) => ({ gift, raw: (fallbackJitter() - 0.5) * 6 }))
   }
   return scored
 }
@@ -427,6 +427,7 @@ function decorateGift(entry, ctx, index, toScore, rand) {
 
   return {
     id: g.id,
+    catalogId: g.id,
     emoji: g.emoji,
     name: g.name,
     why,
@@ -436,6 +437,15 @@ function decorateGift(entry, ctx, index, toScore, rand) {
     matchScore: toScore(entry.raw),
     tip: g.tip,
     leadTime: leadTimeText(g, ctx.days),
+    // 推荐结果保留目录元数据，后续接真实报价 / 图片 / 变体时无需改方案协议。
+    kind: g.kind,
+    format: g.format,
+    pricing: g.pricing,
+    acquisition: g.acquisition,
+    planning: g.planning,
+    constraints: g.constraints,
+    evidence: g.evidence,
+    dataStatus: g.dataStatus,
   }
 }
 

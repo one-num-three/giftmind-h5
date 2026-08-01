@@ -1,3 +1,5 @@
+import { normalizeGiftRecord } from '../src/data/catalogSchema.js'
+
 /**
  * ══════════════════════════════════════════════════════════════
  *  假 AI 的「知识库」层
@@ -93,7 +95,7 @@ const ALL_OCC = [O.BIRTH, O.ANNIV, O.FEST, O.MILE, O.SORRY, O.NOREASON]
  *  礼物库
  * ══════════════════════════════════════════════════════════════ */
 
-export const GIFT_LIBRARY = [
+const RAW_GIFT_LIBRARY = [
   /* ── 定制 / 手工 ───────────────────────────────────── */
   {
     id: 'g_brass_bookmark',
@@ -2693,3 +2695,10 @@ export const LEAD_TIME_TEXT = {
   14: '建议提前 2 周',
   30: '建议提前 1 个月',
 }
+
+/**
+ * 对外仍导出 GIFT_LIBRARY，保证现有推荐器和页面兼容；但每条记录现在都
+ * 带有 schemaVersion / kind / pricing / acquisition / evidence 等数据层字段。
+ */
+export const GIFT_LIBRARY = RAW_GIFT_LIBRARY.map((gift) => normalizeGiftRecord(gift))
+export { RAW_GIFT_LIBRARY }
