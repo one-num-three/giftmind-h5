@@ -13,9 +13,11 @@ const props = defineProps({
   gift: { type: Object, default: () => ({}) },
   primary: Boolean,
   liked: Boolean,
+  locked: Boolean,
+  replacing: Boolean,
 })
 
-const emit = defineEmits(['toggle-like'])
+const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace'])
 
 /** 礼物分类 → 标签配色 */
 const CATEGORY_TONE = {
@@ -64,6 +66,16 @@ function onLike() {
   const id = g.value.id
   if (!id) return
   emit('toggle-like', id)
+}
+
+function onLock() {
+  const id = g.value.catalogId || g.value.id
+  if (id) emit('toggle-lock', id)
+}
+
+function onReplace() {
+  const id = g.value.catalogId || g.value.id
+  if (id && !props.locked && !props.replacing) emit('replace', id)
 }
 
 /* ── 展开/收起的高度过渡（无定时器） ───────── */
@@ -161,6 +173,27 @@ function leave(el) {
         >
           <GIcon name="heart" :size="17" />
           <span class="like__text">{{ liked ? '已收藏' : '收藏' }}</span>
+        </button>
+
+        <button
+          class="like tap"
+          :class="{ 'is-on': locked }"
+          type="button"
+          :aria-pressed="locked ? 'true' : 'false'"
+          @click="onLock"
+        >
+          <GIcon :name="locked ? 'check' : 'bookmark'" :size="16" />
+          <span class="like__text">{{ locked ? '已保留' : '保留' }}</span>
+        </button>
+
+        <button
+          class="replace tap"
+          type="button"
+          :disabled="locked || replacing"
+          @click="onReplace"
+        >
+          <GIcon name="refresh" :size="15" />
+          <span>{{ replacing ? '替换中…' : locked ? '已锁定' : '换一个' }}</span>
         </button>
 
         <button
@@ -378,6 +411,19 @@ function leave(el) {
   margin-top: var(--s-4);
   padding-top: var(--s-3);
   border-top: 1px solid var(--c-line);
+}
+
+.replace {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  color: var(--c-rose-deep);
+  font-size: var(--fs-micro);
+}
+.replace:disabled {
+  color: var(--c-ink-4);
+  cursor: not-allowed;
 }
 
 .like {

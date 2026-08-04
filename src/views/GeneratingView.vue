@@ -84,6 +84,15 @@ const countText = computed(() => {
   return `第 ${n} / ${total.value} 步`
 })
 
+const serviceHint = computed(() => {
+  const status = planStore.serviceStatus
+  if (!status) return '正在连接本地策划服务'
+  if (status.state === 'unavailable') return '本地服务不可达'
+  if (status.state === 'empty_catalog') return '礼物库暂无可用数据'
+  if (status.state === 'rule_fallback') return 'DeepSeek 未配置，将使用规则模式'
+  return `${status.model || 'DeepSeek'} 已连接 · ${status.activeGiftCount} 件候选礼物`
+})
+
 /* ── 丝带成形：把进度切成四段，逐笔画出来 ──── */
 const p = computed(() => percent.value / 100)
 function seg(i) {
@@ -219,6 +228,10 @@ onUnmounted(() => {
             </div>
           </Transition>
         </div>
+
+        <p class="service" :class="{ 'is-warn': planStore.serviceStatus?.state !== 'connected' }">
+          <span class="service__dot" />{{ serviceHint }}
+        </p>
 
         <!-- ══ 失败：给出口 ══ -->
         <div v-if="planStore.error" class="fail">
@@ -459,6 +472,27 @@ onUnmounted(() => {
   font-size: var(--fs-sm);
   line-height: var(--lh-snug);
   color: var(--c-ink-3);
+}
+.service {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--s-2);
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  background: var(--c-sage-tint, var(--c-paper-2));
+  color: var(--c-sage-deep);
+  font-size: var(--fs-micro);
+}
+.service.is-warn {
+  background: var(--c-sand-soft);
+  color: var(--c-ink-3);
+}
+.service__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* 上一条淡出上移，下一条从下方淡入 */

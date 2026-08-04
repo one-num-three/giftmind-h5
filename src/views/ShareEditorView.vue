@@ -137,7 +137,8 @@ async function generate() {
   if (!plan.value || generating.value) return
   generating.value = true
   try {
-    const res = await api.createShare(plan.value.id, buildConfig())
+    // 传整份方案，adapter 会保存不可变快照；之后再编辑原方案不会污染旧分享。
+    const res = await api.createShare(plan.value, buildConfig())
     if (!alive) return
     if (!res || !res.shareId) throw new Error('没能拿到链接，请再试一次')
     result.value = res

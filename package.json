@@ -7,10 +7,12 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "vitest run",
     "preview": "vite preview --port 4173",
     "build:demo": "SINGLE=1 vite build && node scripts/inline.mjs",
     "walkthrough": "node scripts/walkthrough.mjs",
     "catalog:check": "node scripts/catalog-check.mjs",
+    "catalog:export": "node scripts/export-seed-catalog.mjs",
     "lint": "echo \"(占位) 可按需接入 eslint\""
   },
   "dependencies": {
@@ -22,6 +24,7 @@
     "@vitejs/plugin-vue": "^6.0.0",
     "playwright": "^1.62.1",
     "postcss-pxtorem": "^6.1.0",
-    "vite": "^7.0.0"
+    "vite": "^7.0.0",
+    "vitest": "^3.2.7"
   }
 }

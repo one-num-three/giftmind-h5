@@ -12,6 +12,8 @@ import { useHistoryStore } from '@/stores/history'
 import { useSessionStore } from '@/stores/session'
 import { useUiStore } from '@/stores/ui'
 import { copyText } from '@/utils/helpers'
+import api from '@/api'
+import { REPLACE_REASONS } from '@/api/contracts'
 import InsightBlock from '@/components/gift/InsightBlock.vue'
 import GiftCard from '@/components/gift/GiftCard.vue'
 import LetterCard from '@/components/gift/LetterCard.vue'
@@ -73,6 +75,14 @@ function isLiked(id) {
   return Boolean(id) && planStore.likedGiftIds.includes(id)
 }
 
+function giftKey(gift) {
+  return gift?.catalogId || gift?.id || ''
+}
+
+function isLocked(id) {
+  return Boolean(id) && planStore.lockedGiftIds.includes(id)
+}
+
 /* ── 礼物：换一批 / 收藏 ──────────────────── */
 const shuffling = ref(false)
 
@@ -93,6 +103,41 @@ function onToggleLike(id) {
   planStore.toggleLike(id)
 }
 
+function onToggleLock(id) {
+  planStore.toggleLock(id)
+  ui.success(isLocked(id) ? '已保留这件，后续调整不会替换它' : '已取消保留')
+}
+
+const replaceOpen = ref(false)
+const replaceTargetId = ref('')
+const replaceReason = ref('not_for_them')
+const replaceNote = ref('')
+const replacingId = ref('')
+
+function openReplace(id) {
+  replaceTargetId.value = id
+  replaceReason.value = 'not_for_them'
+  replaceNote.value = ''
+  replaceOpen.value = true
+}
+
+async function confirmReplace() {
+  if (!replaceTargetId.value || replacingId.value) return
+  replacingId.value = replaceTargetId.value
+  replaceOpen.value = false
+  try {
+    await planStore.replaceGift(replacingId.value, {
+      reason: replaceReason.value,
+      reasonNote: replaceNote.value,
+    })
+    ui.success('已经换成一件更合适的')
+  } catch (error) {
+    ui.error(error?.message || '这次没换成，请稍后再试')
+  } finally {
+    replacingId.value = ''
+  }
+}
+
 /* ── 信：换语气 ───────────────────────────── */
 const letterLoading = ref(false)
 
@@ -108,6 +153,33 @@ async function onChangeTone(tone) {
     letterLoading.value = false
   }
 }
+
+const ritualOpen = ref(false)
+const ritualInstruction = ref('')
+const ritualLoading = ref(false)
+
+async function onRewriteRitual() {
+  if (ritualLoading.value) return
+  ritualLoading.value = true
+  ritualOpen.value = false
+  try {
+    await planStore.rewriteRitual(ritualInstruction.value)
+    ritualInstruction.value = ''
+    ui.success('仪式流程已经重新整理')
+  } catch (error) {
+    ui.error(error?.message || '这次没改成，请稍后再试')
+  } finally {
+    ritualLoading.value = false
+  }
+}
+
+const sourceText = computed(() => {
+  if (!plan.value?.source) return ''
+  if (plan.value.source === 'deepseek') return `DeepSeek · ${text(plan.value.model) || 'AI 生成'}`
+  if (plan.value.source === 'rule_fallback') return '规则模式生成'
+  return text(plan.value.source)
+})
+const replies = computed(() => planStore.replies || [])
 
 /* ── 分享 / 更多 ──────────────────────────── */
 const moreOpen = ref(false)
@@ -214,6 +286,7 @@ onMounted(() => {
   }
   scrollEl = bodyRef.value
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
+  planStore.loadReplies()
 })
 
 onUnmounted(() => {
@@ -255,6 +328,7 @@ onUnmounted(() => {
         <p class="cover__eyebrow">你的专属方案</p>
         <h1 class="cover__title">{{ title }}</h1>
         <p v-if="subtitle" class="cover__sub">{{ subtitle }}</p>
+        <p v-if="sourceText" class="source-note">{{ sourceText }}</p>
 
         <ul v-if="metas.length" class="metas">
           <li v-for="m in metas" :key="m.k" class="meta">
@@ -276,6 +350,7 @@ onUnmounted(() => {
           <div class="sec__head">
             <p class="section-label">礼物推荐</p>
             <button
+              v-if="api.isMock"
               class="linkbtn tap"
               type="button"
               :disabled="shuffling || !gifts.length"
@@ -289,11 +364,15 @@ onUnmounted(() => {
           <div v-if="gifts.length" class="gifts" :class="{ 'is-busy': shuffling }">
             <GiftCard
               v-for="(g, i) in gifts"
-              :key="g?.id || `gift-${i}`"
+              :key="giftKey(g) || `gift-${i}`"
               :gift="g"
               :primary="i === 0"
-              :liked="isLiked(g?.id)"
+              :liked="isLiked(giftKey(g))"
+              :locked="isLocked(giftKey(g))"
+              :replacing="replacingId === giftKey(g)"
               @toggle-like="onToggleLike"
+              @toggle-lock="onToggleLock"
+              @replace="openReplace"
             />
           </div>
           <GEmpty
@@ -312,8 +391,21 @@ onUnmounted(() => {
 
         <!-- 仪式 -->
         <section v-if="ritual.length" class="sec anim-up d-4">
-          <p class="section-label">送出的那一刻</p>
+          <div class="sec__head">
+            <p class="section-label">送出的那一刻</p>
+            <button class="linkbtn tap" type="button" :disabled="ritualLoading" @click="ritualOpen = true">
+              <GIcon name="refresh" :size="14" />
+              <span>{{ ritualLoading ? '调整中…' : '调整仪式' }}</span>
+            </button>
+          </div>
           <RitualTimeline :steps="ritual" />
+        </section>
+
+        <section v-if="replies.length" class="sec replies anim-up">
+          <p class="section-label">TA 的回话</p>
+          <div v-for="reply in replies" :key="reply.id" class="reply-card">
+            <p>“{{ reply.content }}”</p>
+          </div>
         </section>
 
         <p class="tail">方案已经存进「我的方案」，随时可以回来改。</p>
@@ -389,6 +481,44 @@ onUnmounted(() => {
             重新开始
           </GButton>
         </div>
+      </template>
+    </GSheet>
+
+    <GSheet v-model="replaceOpen" title="为什么想换掉它？">
+      <div class="replace-reasons">
+        <button
+          v-for="reason in REPLACE_REASONS"
+          :key="reason.code"
+          type="button"
+          class="reason tap"
+          :class="{ 'is-on': replaceReason === reason.code }"
+          @click="replaceReason = reason.code"
+        >
+          {{ reason.label }}
+        </button>
+      </div>
+      <textarea
+        v-model="replaceNote"
+        class="edit-note"
+        rows="3"
+        maxlength="160"
+        placeholder="可选：再补充一句，你真正想要什么"
+      />
+      <template #footer>
+        <GButton variant="primary" size="lg" block @click="confirmReplace">让 AI 换一件</GButton>
+      </template>
+    </GSheet>
+
+    <GSheet v-model="ritualOpen" title="怎么调整送出的方式？">
+      <textarea
+        v-model="ritualInstruction"
+        class="edit-note"
+        rows="4"
+        maxlength="240"
+        placeholder="例如：流程再简单一点；改成周末在家完成；不要制造公开惊喜……"
+      />
+      <template #footer>
+        <GButton variant="primary" size="lg" block @click="onRewriteRitual">重新整理仪式</GButton>
       </template>
     </GSheet>
   </div>
@@ -631,5 +761,52 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--s-3);
+}
+
+.source-note {
+  display: inline-flex;
+  margin-top: var(--s-3);
+  padding: 4px 10px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-surface) 72%, transparent);
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+}
+.replace-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.reason {
+  padding: 9px 13px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-ink-2);
+  box-shadow: inset 0 0 0 1px var(--c-line-strong);
+  font-size: var(--fs-sm);
+}
+.reason.is-on {
+  background: var(--c-rose-tint);
+  color: var(--c-rose-deep);
+  box-shadow: inset 0 0 0 1px var(--c-rose-soft);
+}
+.edit-note {
+  width: 100%;
+  margin-top: var(--s-4);
+  padding: var(--s-4);
+  border: 1px solid var(--c-line-strong);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  line-height: var(--lh-normal);
+  resize: vertical;
+}
+.reply-card {
+  margin-top: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--c-sage-tint, var(--c-paper-2));
+  color: var(--c-ink-2);
+  line-height: var(--lh-normal);
 }
 </style>

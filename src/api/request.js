@@ -5,8 +5,8 @@
 
 import storage from '@/utils/storage'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
-const TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 20000)
+const BASE_URL = String(import.meta.env.VITE_API_BASE_URL || '/api/h5').replace(/\/$/, '')
+const TIMEOUT = Number(import.meta.env.VITE_API_TIMEOUT || 60000)
 
 export class ApiError extends Error {
   constructor(message, { status = 0, code = 'UNKNOWN', payload = null } = {}) {
@@ -16,6 +16,29 @@ export class ApiError extends Error {
     this.code = code
     this.payload = payload
   }
+}
+
+function errorMessage(data, status) {
+  if (typeof data === 'string' && data.trim()) return data.trim()
+  if (typeof data?.detail === 'string') return data.detail
+  if (typeof data?.detail?.message === 'string') return data.detail.message
+  if (Array.isArray(data?.detail)) {
+    return data.detail.map((item) => item?.msg).filter(Boolean).join('；') || `请求失败 (${status})`
+  }
+  return data?.message || `请求失败 (${status})`
+}
+
+function errorCode(data, status) {
+  if (typeof data?.code === 'string') return data.code
+  if (typeof data?.detail?.code === 'string') return data.detail.code
+  if (status === 401) return 'AI_AUTH_FAILED'
+  if (status === 402) return 'AI_BALANCE_INSUFFICIENT'
+  if (status === 404) return 'NOT_FOUND'
+  if (status === 409) return 'CONFLICT'
+  if (status === 422) return 'VALIDATION_ERROR'
+  if (status === 429) return 'RATE_LIMITED'
+  if (status >= 500) return 'SERVER_ERROR'
+  return 'HTTP_ERROR'
 }
 
 function authHeaders() {
@@ -44,9 +67,9 @@ export async function request(path, { method = 'GET', body, headers, signal, tim
     const data = text ? safeParse(text) : null
 
     if (!res.ok) {
-      throw new ApiError(data?.message || `请求失败 (${res.status})`, {
+      throw new ApiError(errorMessage(data, res.status), {
         status: res.status,
-        code: data?.code || 'HTTP_ERROR',
+        code: errorCode(data, res.status),
         payload: data,
       })
     }
@@ -56,9 +79,12 @@ export async function request(path, { method = 'GET', body, headers, signal, tim
     }
     return data && typeof data === 'object' && 'data' in data ? data.data : data
   } catch (err) {
-    if (err.name === 'AbortError') throw new ApiError('请求超时，请重试', { code: 'TIMEOUT' })
+    if (err.name === 'AbortError') throw new ApiError('服务响应超时，请稍后重试', { code: 'TIMEOUT' })
     if (err instanceof ApiError) throw err
-    throw new ApiError(err.message || '网络异常', { code: 'NETWORK' })
+    throw new ApiError('连接不到本地策划服务，请确认 FastAPI 已在 8000 端口启动', {
+      code: 'NETWORK',
+      payload: { cause: err?.message || 'network error' },
+    })
   } finally {
     clearTimeout(timer)
   }

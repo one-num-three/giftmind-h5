@@ -38,6 +38,7 @@ const opened = ref(false)
 const replyText = ref('')
 const repliedText = ref('')
 const replied = ref(false)
+const replying = ref(false)
 
 const scrollRef = ref(null)
 const bgPos = ref(0)
@@ -158,17 +159,26 @@ function onScroll() {
   rafId = requestAnimationFrame(measure)
 }
 
-/* ── 回一句话（Mock 不真发送） ───────────────── */
-function sendReply() {
+/* ── 回一句话（本地持久化到 shareId） ───────── */
+async function sendReply() {
   const t = replyText.value.trim()
   if (!t) {
     ui.showToast('写一句再送过去吧')
     return
   }
-  repliedText.value = t
-  replied.value = true
-  replyText.value = ''
-  ui.success('已经送到了')
+  if (replying.value) return
+  replying.value = true
+  try {
+    const reply = await api.sendShareReply(String(route.params.shareId || ''), t)
+    repliedText.value = text(reply?.content) || t
+    replied.value = true
+    replyText.value = ''
+    ui.success('已经送到了')
+  } catch (error) {
+    ui.error(error?.message || '暂时没送到，请再试一次')
+  } finally {
+    replying.value = false
+  }
 }
 
 function goHome() {
@@ -185,6 +195,12 @@ onMounted(async () => {
     if (!alive) return
     if (!res || !res.plan) throw new Error('内容不完整')
     data.value = res
+    const previous = await api.fetchShareReplies({ shareId: String(route.params.shareId || '') })
+    const latest = Array.isArray(previous) ? previous[previous.length - 1] : null
+    if (latest?.content) {
+      repliedText.value = text(latest.content)
+      replied.value = true
+    }
   } catch {
     if (alive) failed.value = true
   } finally {
@@ -300,7 +316,9 @@ onUnmounted(() => {
                   placeholder="比如：我很喜欢。"
                 />
               </div>
-              <button type="button" class="reply__send tap" @click="sendReply">送出这句话</button>
+              <button type="button" class="reply__send tap" :disabled="replying" @click="sendReply">
+                {{ replying ? '正在送出…' : '送出这句话' }}
+              </button>
             </template>
             <template v-else>
               <p class="reply__title">你的回话已经送到</p>

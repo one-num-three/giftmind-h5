@@ -14,6 +14,9 @@ const adapter = USE_MOCK ? mock : real
 
 export const isMock = USE_MOCK
 
+/** 检查 FastAPI、DeepSeek 与推荐池状态。 */
+export const getServiceStatus = (...args) => adapter.getServiceStatus(...args)
+
 /** 生成完整送礼方案（可流式：传 onProgress 接收阶段性文案） */
 export const generatePlan = (...args) => adapter.generatePlan(...args)
 
@@ -23,21 +26,39 @@ export const chatOnce = (...args) => adapter.chatOnce(...args)
 /** 重新生成一封信 */
 export const regenerateLetter = (...args) => adapter.regenerateLetter(...args)
 
+/** 只替换当前方案中的一件礼物。 */
+export const replaceGift = (...args) => adapter.replaceGift(...args)
+
+/** 只重写仪式，不修改礼物和信件。 */
+export const rewriteRitual = (...args) => adapter.rewriteRitual(...args)
+
 /** 换一批礼物 */
 export const shuffleGifts = (...args) => adapter.shuffleGifts(...args)
 
 /** 创建分享链接 */
 export const createShare = (...args) => adapter.createShare(...args)
 
+/** 主动用当前方案覆盖一条已有分享。 */
+export const updateShare = (...args) => adapter.updateShare(...args)
+
 /** 读取分享内容（收礼人视角） */
 export const fetchShare = (...args) => adapter.fetchShare(...args)
 
+export const sendShareReply = (...args) => adapter.sendShareReply(...args)
+export const fetchShareReplies = (...args) => adapter.fetchShareReplies(...args)
+
 export default {
   isMock,
+  getServiceStatus,
   generatePlan,
   chatOnce,
   regenerateLetter,
+  replaceGift,
+  rewriteRitual,
   shuffleGifts,
   createShare,
+  updateShare,
   fetchShare,
+  sendShareReply,
+  fetchShareReplies,
 }

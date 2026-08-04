@@ -4,7 +4,13 @@
  */
 import { generateMockPlan, generateLetter, pickGifts } from '../../mock/planGenerator'
 import { GENERATING_STEPS } from '../../mock/generatingSteps'
-import storage from '@/utils/storage'
+import {
+  createLocalShare,
+  fetchLocalShare,
+  listLocalReplies,
+  saveLocalReply,
+  updateLocalShare,
+} from './localShareStore'
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -22,15 +28,44 @@ export async function generatePlan(answers, { onProgress, signal } = {}) {
   return generateMockPlan(answers)
 }
 
+export async function getServiceStatus() {
+  return {
+    ok: true,
+    state: 'rule_fallback',
+    deepseekConfigured: false,
+    model: 'Mock 规则引擎',
+    activeGiftCount: 101,
+    promptVersions: {},
+  }
+}
+
 export async function chatOnce({ messages }) {
   await delay(700)
   const last = messages?.[messages.length - 1]?.content || ''
   return `我记下了：「${last.slice(0, 30)}${last.length > 30 ? '…' : ''}」，这会体现在方案里。`
 }
 
-export async function regenerateLetter(planId, { tone, answers } = {}) {
+export async function regenerateLetter(plan, { tone, answers } = {}) {
   await delay(900)
-  return generateLetter(answers || {}, tone)
+  return generateLetter(plan?.answers || answers || {}, tone)
+}
+
+export async function replaceGift(plan, { targetId } = {}) {
+  await delay(700)
+  const current = Array.isArray(plan?.gifts) ? plan.gifts : []
+  const exclude = current.map((gift) => gift?.catalogId || gift?.id).filter(Boolean)
+  const [gift] = pickGifts(plan?.answers || {}, { exclude })
+  if (!gift) throw new Error('暂时没有更多合适礼物')
+  return { targetId, gift }
+}
+
+export async function rewriteRitual(plan, { instruction = '' } = {}) {
+  await delay(700)
+  const current = Array.isArray(plan?.ritual) ? plan.ritual : []
+  if (!instruction.trim()) return current
+  return current.map((step, index) =>
+    index === 0 ? { ...step, desc: `${step.desc || ''}${step.desc ? ' ' : ''}${instruction.trim()}` } : { ...step },
+  )
 }
 
 export async function shuffleGifts(planId, { exclude = [], answers } = {}) {
@@ -40,20 +75,26 @@ export async function shuffleGifts(planId, { exclude = [], answers } = {}) {
 
 export async function createShare(planId, config = {}) {
   await delay(600)
-  const shareId = `s_${Math.random().toString(36).slice(2, 10)}`
-  const store = storage.getJSON('gm_shares', {}) || {}
-  store[shareId] = { planId, config, createdAt: Date.now() }
-  storage.setJSON('gm_shares', store)
-  return { shareId, url: `${location.origin}${location.pathname}#/s/${shareId}` }
+  const record = createLocalShare(planId, config)
+  return { ...record, url: `${location.origin}${location.pathname}#/s/${record.shareId}` }
+}
+
+export async function updateShare(shareId, plan, config = {}) {
+  await delay(400)
+  const record = updateLocalShare(shareId, plan, config)
+  return { ...record, url: `${location.origin}${location.pathname}#/s/${record.shareId}` }
 }
 
 export async function fetchShare(shareId) {
   await delay(400)
-  const store = storage.getJSON('gm_shares', {}) || {}
-  const rec = store[shareId]
-  if (!rec) throw new Error('分享内容不存在或已过期')
-  const plans = storage.getJSON('gm_plans', []) || []
-  const plan = plans.find((p) => p.id === rec.planId)
-  if (!plan) throw new Error('对应的方案已被删除')
-  return { ...rec, plan }
+  return fetchLocalShare(shareId)
+}
+
+export async function sendShareReply(shareId, content) {
+  await delay(250)
+  return saveLocalReply(shareId, content)
+}
+
+export async function fetchShareReplies(query) {
+  return listLocalReplies(query)
 }

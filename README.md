@@ -60,9 +60,9 @@ giftmind-h5/
    ├─ api/
    │  ├─ index.js             ★ 唯一出口，Mock / 真实后端一行切换
    │  ├─ mockAdapter.js       Mock 实现
-   │  ├─ realAdapter.js       真实后端实现（含 SSE 流式）
-   │  ├─ request.js           fetch 封装：超时 / 鉴权 / 统一错误 / SSE 解析
-   │  └─ prompt.js            ★ system prompt + Plan JSON Schema（前后端共用契约）
+   │  ├─ realAdapter.js       FastAPI 真实策划、专项修改与本地分享适配器
+   │  ├─ contracts.js         H5 API 端点、状态与 Plan 契约
+   │  └─ request.js           fetch 封装：超时 / 鉴权 / 结构化错误
    ├─ components/
    │  ├─ base/                10 个全局注册的基础组件（GButton/GCard/GChip/...）
    │  ├─ chat/                气泡、打字点、选项面板、输入区
@@ -106,14 +106,23 @@ giftmind-h5/
 
 101 条礼物、信件句式库、仪式步骤库都在这里。演示前想让方案更贴某个人群，直接加条目。
 
-### 4. 接真实 AI → `.env` 一行
+### 4. 接本地真实 AI → `.env` 一行
 
 ```bash
 VITE_USE_MOCK=false
-VITE_API_BASE_URL=https://your-gateway/api
+VITE_API_BASE_URL=/api/h5
+VITE_API_PROXY_TARGET=http://127.0.0.1:8000
 ```
 
-后端实现 6 个接口即可，前端一行不用改。详见 **[docs/INTEGRATION.md](docs/INTEGRATION.md)**。
+配套接口已经实现在 `giftmind-data-studio` 的 FastAPI 中。DeepSeek Key 和 Prompt 只存在服务端；H5 支持服务状态、生成方案、单件替换、信件重写、仪式重写与有限方案对话。没有 Key 时自动使用规则模式。
+
+首次联调先导出 101 条 Seed：
+
+```bash
+npm run catalog:export
+```
+
+再到 Data Studio 导入；详细命令见该仓库 README。
 
 ## 数据层：先把“礼物想法”和真实报价分开
 
@@ -146,6 +155,7 @@ npm run build                                  # 构建
 npx vite preview --port 4173                   # 起服务
 node scripts/walkthrough.mjs                   # 全流程走查，截图落在 .walkthrough/
 npm run catalog:check                           # 校验目录字段、类型和唯一 id
+npm run catalog:export                          # 导出可被 Data Studio 幂等导入的 JSON
 ```
 
 `walkthrough.mjs` 会用 Playwright 以 iPhone 尺寸自动跑完整条链路（含填写文本题、拆信封、
@@ -159,7 +169,7 @@ npm run catalog:check                           # 校验目录字段、类型和
 
 - [ ] 会员付费墙与定价页（本轮范围外，路由与 store 已预留位置）
 - [ ] 礼物卡跳转电商 / 加购链路（`gift` 数据结构里已留 `tags` / `tip`，可扩 `sku`）
-- [ ] 分享页「回一句话」目前只在本地反馈，接后端后走 `POST /shares/:id/replies`
+- [x] 分享页使用不可变本地快照；回信按 shareId 持久化，旧分享不随方案编辑变化
 - [ ] 登录态：`request.js` 已读 `localStorage.gm_token`，接入后补登录页即可
 - [ ] 方案与历史目前存 localStorage，接后端后把 `stores/history.js` 的 `read/write` 换成接口
 - [ ] 埋点：建议在 `router.afterEach` 与 `session.answer` 两处接入
