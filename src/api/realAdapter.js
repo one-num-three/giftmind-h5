@@ -16,6 +16,10 @@ import {
   updateLocalShare,
 } from './localShareStore'
 
+// 完整方案生成比单字段建议更耗时；前端窗口要覆盖后端 120 秒的
+// 单次耐心请求，否则后端仍在生成时浏览器会先报超时。
+const PLAN_GENERATION_TIMEOUT = 180000
+
 function startProgress(onProgress) {
   if (typeof onProgress !== 'function') return () => {}
   let index = 0
@@ -32,6 +36,26 @@ function giftId(gift) {
   return gift?.catalogId || gift?.id || ''
 }
 
+function listAnswer(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
+  const text = String(value || '').trim()
+  return text ? [text] : []
+}
+
+/**
+ * 兼容 Mock 时代留下的草稿：多选字段曾可能被保存为空字符串。
+ * 所有真实 API 请求都从这里统一成后端 PlanningAnswers 契约。
+ */
+export function normalizePlanningAnswers(answers) {
+  const source = answers && typeof answers === 'object' ? answers : {}
+  return {
+    ...source,
+    personality: listAnswer(source.personality),
+    taboo: listAnswer(source.taboo),
+    style: listAnswer(source.style),
+  }
+}
+
 export async function getServiceStatus({ signal } = {}) {
   const raw = await http.get(H5_ENDPOINTS.status, { signal, timeout: 8000 })
   return normalizeServiceStatus(raw)
@@ -42,8 +66,8 @@ export async function generatePlan(answers, { onProgress, signal } = {}) {
   try {
     const result = await http.post(
       H5_ENDPOINTS.generatePlan,
-      { requestId: newRequestId(), answers: answers || {} },
-      { signal, timeout: 90000 },
+      { requestId: newRequestId(), answers: normalizePlanningAnswers(answers) },
+      { signal, timeout: PLAN_GENERATION_TIMEOUT },
     )
     return assertPlan(result)
   } finally {
@@ -57,7 +81,7 @@ export async function chatOnce({ messages, answers, plan }, { signal } = {}) {
     {
       requestId: newRequestId(),
       messages: Array.isArray(messages) ? messages.slice(-8) : [],
-      answers: answers || {},
+      answers: normalizePlanningAnswers(answers),
       plan: plan || null,
     },
     { signal, timeout: 60000 },
@@ -71,7 +95,7 @@ export async function replaceGift(plan, { targetId, reason, reasonNote = '', loc
     H5_ENDPOINTS.replaceGift,
     {
       requestId: newRequestId(),
-      answers: plan?.answers || {},
+      answers: normalizePlanningAnswers(plan?.answers),
       currentCatalogIds: gifts.map(giftId).filter(Boolean),
       replaceCatalogId: targetId,
       reason: reason || 'other',
@@ -88,7 +112,7 @@ export async function regenerateLetter(plan, { tone, instruction = '' } = {}) {
     H5_ENDPOINTS.rewriteLetter,
     {
       requestId: newRequestId(),
-      answers: plan?.answers || {},
+      answers: normalizePlanningAnswers(plan?.answers),
       gifts: Array.isArray(plan?.gifts) ? plan.gifts : [],
       currentLetter: plan?.letter || null,
       tone: LETTER_TONES[tone] || tone || 'warm',
@@ -103,7 +127,7 @@ export async function rewriteRitual(plan, { instruction = '' } = {}) {
     H5_ENDPOINTS.rewriteRitual,
     {
       requestId: newRequestId(),
-      answers: plan?.answers || {},
+      answers: normalizePlanningAnswers(plan?.answers),
       gifts: Array.isArray(plan?.gifts) ? plan.gifts : [],
       currentRitual: Array.isArray(plan?.ritual) ? plan.ritual : [],
       instruction,

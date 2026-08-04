@@ -69,7 +69,9 @@ export const useSessionStore = defineStore('session', {
     },
 
     skip(step) {
-      this.answers[step.key] = ''
+      // 多选字段的 API 契约始终是数组。保留这个类型可以避免真实后端
+      // 在“没有，跳过这题”时收到空字符串并返回 422。
+      this.answers[step.key] = step.type === 'multi' ? [] : ''
       this.pushMessage({ role: 'user', text: '（跳过）', stepId: step.id, muted: true })
       this.stepIndex += 1
       this.persistDraft()
