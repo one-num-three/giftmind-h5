@@ -93,7 +93,12 @@ await checkOverflow(page, 'chat')
 
 const TEXT_ANSWER = '她一直说想学插花。去年生日那天我们在鼓楼的小店躲雨，躲了整整一个小时。'
 let guard = 0
-while (!page.url().includes('/generating') && !page.url().includes('/plan') && guard < 40) {
+while (
+  !page.url().includes('/summary') &&
+  !page.url().includes('/generating') &&
+  !page.url().includes('/plan') &&
+  guard < 40
+) {
   guard += 1
   await sleep(700)
 
@@ -134,6 +139,26 @@ while (!page.url().includes('/generating') && !page.url().includes('/plan') && g
   }
 }
 notes.push(`对话推进用了 ${guard} 轮，最终 URL = ${page.url()}`)
+
+/* ── 2.5 摘要确认页（P0：访谈结束后先确认四块摘要） ── */
+if (page.url().includes('/summary')) {
+  await sleep(1500)
+  await snap(page, 'summary')
+  await checkOverflow(page, 'summary')
+  const sumAreas = await page.locator('.sum__area').count()
+  if (sumAreas === 4) notes.push('摘要确认页四块均已加载')
+  else notes.push(`⚠ 摘要确认页只加载了 ${sumAreas}/4 块`)
+  const confirmBtn = page.locator('button:visible', { hasText: '就按这些来' }).first()
+  if (await confirmBtn.count()) {
+    await confirmBtn.click()
+    await page.waitForURL('**/generating', { timeout: 8000 }).catch(() =>
+      notes.push('⚠ 摘要确认后未进入生成页'),
+    )
+  } else {
+    notes.push('⚠ 摘要确认页没找到「就按这些来」按钮')
+  }
+  await sleep(800)
+}
 
 /* ── 3. 生成中 ── */
 if (page.url().includes('/generating')) {

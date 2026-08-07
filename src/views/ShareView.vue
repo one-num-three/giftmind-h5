@@ -74,7 +74,11 @@ const theme = computed(() => {
   return THEMES.includes(t) ? t : 'dawn'
 })
 const recipient = computed(
-  () => text(config.value.recipient) || text(plan.value?.answers?.recipient).split('/')[0].trim() || '你',
+  () =>
+    text(config.value.recipient) ||
+    text(plan.value?.recipient).split('/')[0].trim() ||
+    text(plan.value?.answers?.recipient).split('/')[0].trim() ||
+    '你',
 )
 const greeting = computed(
   () =>
