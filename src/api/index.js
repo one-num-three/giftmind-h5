@@ -17,6 +17,9 @@ export const isMock = USE_MOCK
 /** 检查 FastAPI、DeepSeek 与推荐池状态。 */
 export const getServiceStatus = (...args) => adapter.getServiceStatus(...args)
 
+/** 生成摘要确认页的四块内容 */
+export const generateSummary = (...args) => adapter.generateSummary(...args)
+
 /** 生成完整送礼方案（可流式：传 onProgress 接收阶段性文案） */
 export const generatePlan = (...args) => adapter.generatePlan(...args)
 
@@ -47,9 +50,13 @@ export const fetchShare = (...args) => adapter.fetchShare(...args)
 export const sendShareReply = (...args) => adapter.sendShareReply(...args)
 export const fetchShareReplies = (...args) => adapter.fetchShareReplies(...args)
 
+/** 录音转写：录音 → 文本 → 走现有对话管道 */
+export const transcribeVoice = (...args) => adapter.transcribeVoice(...args)
+
 export default {
   isMock,
   getServiceStatus,
+  generateSummary,
   generatePlan,
   chatOnce,
   regenerateLetter,
@@ -61,4 +68,5 @@ export default {
   fetchShare,
   sendShareReply,
   fetchShareReplies,
+  transcribeVoice,
 }

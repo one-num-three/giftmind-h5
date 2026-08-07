@@ -20,6 +20,12 @@ const routes = [
     meta: { title: '和 AI 聊聊 TA', depth: 1 },
   },
   {
+    path: '/summary',
+    name: 'summary',
+    component: () => import('@/views/SummaryView.vue'),
+    meta: { title: '确认一下', depth: 2 },
+  },
+  {
     path: '/generating',
     name: 'generating',
     component: () => import('@/views/GeneratingView.vue'),

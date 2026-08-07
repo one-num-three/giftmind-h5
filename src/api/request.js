@@ -50,16 +50,17 @@ export async function request(path, { method = 'GET', body, headers, signal, tim
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
   if (signal) signal.addEventListener('abort', () => controller.abort())
+  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData
 
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
       method,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...authHeaders(),
         ...headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: isFormData ? body : body ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     })
 

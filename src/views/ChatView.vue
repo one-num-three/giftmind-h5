@@ -6,7 +6,10 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import api, { isMock } from '@/api'
 import { useSessionStore } from '@/stores/session'
+import { usePlanStore } from '@/stores/plan'
+import { useUiStore } from '@/stores/ui'
 import { useChatFlow } from '@/composables/useChatFlow'
 import ChatBubble from '@/components/chat/ChatBubble.vue'
 import TypingDots from '@/components/chat/TypingDots.vue'
@@ -15,6 +18,8 @@ import ChatComposer from '@/components/chat/ChatComposer.vue'
 
 const router = useRouter()
 const session = useSessionStore()
+const planStore = usePlanStore()
+const ui = useUiStore()
 const { typing, submit, skipStep, goBack, defer } = useChatFlow()
 
 const streamRef = ref(null)
@@ -44,6 +49,9 @@ const mode = computed(() => {
   if (s.type === 'single' || s.type === 'multi') return s.options?.length ? 'choice' : 'text'
   return 'text'
 })
+
+/** 语音转写只在服务端已配置（或 Mock 模式）时开放 */
+const voiceAvailable = computed(() => isMock || Boolean(planStore.serviceStatus?.voiceConfigured))
 
 /* ── 消息流 ───────────────────────────────────── */
 const bubbles = computed(() =>
@@ -158,6 +166,8 @@ function onViewportResize() {
 onMounted(() => {
   nextTick(() => scrollToBottom(false))
   window.visualViewport?.addEventListener('resize', onViewportResize)
+  // 非阻塞：只决定 mic 按钮是否出现，失败不影响聊天
+  planStore.refreshServiceStatus().catch(() => {})
 })
 onUnmounted(() => {
   window.visualViewport?.removeEventListener('resize', onViewportResize)
@@ -225,10 +235,12 @@ onUnmounted(() => {
         :skippable="Boolean(step.skippable)"
         :cancelable="customMode"
         :autofocus="customMode"
+        :voice="voiceAvailable"
         @submit="onComposerSubmit"
         @skip="onSkip"
         @cancel="customMode = false"
         @focus="onComposerFocus"
+        @voice-error="(message) => ui.error(message)"
       />
       <div v-else class="chat__idle" aria-hidden="true" />
     </div>

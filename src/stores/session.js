@@ -77,6 +77,24 @@ export const useSessionStore = defineStore('session', {
       this.persistDraft()
     },
 
+    /** 摘要确认页的修改写回结构化答案，再走生成流程 */
+    applySummaryEdits(edits) {
+      const map = {
+        who: 'recipient',
+        story: 'memory',
+        feeling: 'feeling',
+        constraints: 'summaryNotes',
+      }
+      for (const [blockKey, value] of Object.entries(edits || {})) {
+        const field = map[blockKey]
+        if (!field) continue
+        const text = typeof value === 'string' ? value.trim() : ''
+        if (!text) continue
+        this.answers[field] = text
+      }
+      this.persistDraft()
+    },
+
     /** 回到上一题（重新作答） */
     back() {
       if (this.stepIndex === 0) return

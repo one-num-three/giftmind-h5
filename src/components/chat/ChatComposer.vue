@@ -7,6 +7,7 @@
  *  · 上方一行放次要动作：回到选项 / 跳过
  */
 import { computed, nextTick, onMounted, ref } from 'vue'
+import { useVoiceInput } from '@/composables/useVoiceInput'
 
 const props = defineProps({
   placeholder: { type: String, default: '写点什么…' },
@@ -14,15 +15,18 @@ const props = defineProps({
   skippable: Boolean,
   cancelable: Boolean, // 由「或者自己说…」进来的，可以退回选项
   autofocus: Boolean,
+  voice: Boolean, // 后端已配置语音转写时才显示 mic
 })
-const emit = defineEmits(['submit', 'skip', 'cancel', 'focus'])
+const emit = defineEmits(['submit', 'skip', 'cancel', 'focus', 'voiceError'])
 
 const text = ref('')
 const areaRef = ref(null)
 const focused = ref(false)
 let composing = false
+const voice = useVoiceInput()
 
 const canSend = computed(() => text.value.trim().length > 0)
+const voiceBusy = computed(() => voice.recording.value || voice.transcribing.value)
 
 function autoGrow() {
   const el = areaRef.value
@@ -52,6 +56,30 @@ function onFocus() {
   emit('focus')
 }
 
+async function onMic() {
+  if (!props.voice || voiceBusy.value) return
+  if (!voice.recording.value) {
+    try {
+      await voice.start()
+    } catch (error) {
+      emit('voiceError', error?.message || '语音不可用')
+    }
+    return
+  }
+  try {
+    const transcript = await voice.stop()
+    if (transcript) {
+      text.value = transcript
+      nextTick(() => {
+        autoGrow()
+        areaRef.value?.focus()
+      })
+    }
+  } catch (error) {
+    emit('voiceError', error?.message || '语音转写失败，请重试')
+  }
+}
+
 onMounted(() => {
   autoGrow()
   if (props.autofocus) areaRef.value?.focus()
@@ -75,6 +103,23 @@ defineExpose({ focus: () => areaRef.value?.focus() })
     </div>
 
     <div class="composer__box" :class="{ focused }">
+      <button
+        v-if="voice"
+        class="composer__mic tap"
+        :class="{ recording: voice.recording, busy: voiceBusy }"
+        :aria-label="voice.recording ? `录音中 ${voice.seconds} 秒，点击结束` : '用语音说'"
+        :disabled="voice.transcribing"
+        @mousedown.prevent
+        @click="onMic"
+      >
+        <svg v-if="!voice.transcribing" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2Z"
+          />
+        </svg>
+        <span v-else class="composer__mic-spin" aria-hidden="true" />
+        <span v-if="voice.recording" class="composer__mic-sec">{{ voice.seconds }}</span>
+      </button>
       <textarea
         ref="areaRef"
         v-model="text"
@@ -198,5 +243,71 @@ defineExpose({ focus: () => areaRef.value?.focus() })
   color: var(--c-ink-4);
   box-shadow: none;
   pointer-events: none;
+}
+
+.composer__mic {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-ink-3);
+  background: var(--c-paper-2);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+  transition: color var(--t-fast), background var(--t-fast);
+}
+.composer__mic svg {
+  width: 19px;
+  height: 19px;
+  fill: currentColor;
+}
+.composer__mic.recording {
+  color: var(--c-ink-inverse);
+  background: var(--c-rose);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-rose) 24%, transparent);
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+.composer__mic.busy {
+  pointer-events: none;
+  opacity: 0.7;
+}
+.composer__mic-sec {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--c-ink-inverse);
+  background: var(--c-rose);
+}
+.composer__mic-spin {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--c-ink-3);
+  border-top-color: transparent;
+  animation: mic-rotate 0.8s linear infinite;
+}
+@keyframes mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@keyframes mic-rotate {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

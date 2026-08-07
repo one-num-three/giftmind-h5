@@ -1,11 +1,18 @@
 /** GiftMind H5 本地策划 API 的唯一前端契约。 */
 export const H5_ENDPOINTS = Object.freeze({
   status: '/status',
+  summaryPlan: '/plans/summary',
   generatePlan: '/plans/generate',
   replaceGift: '/plans/gifts/replace',
   rewriteLetter: '/plans/letter/rewrite',
   rewriteRitual: '/plans/ritual/rewrite',
   chat: '/chat',
+  createShare: '/shares',
+  updateShare: '/shares/',
+  fetchShare: '/shares/',
+  sendShareReply: '/shares/',
+  fetchShareReplies: '/shares/',
+  voiceTranscribe: '/voice/transcribe',
 })
 
 export const GENERATION_STAGES = Object.freeze([
@@ -59,6 +66,7 @@ export function normalizeServiceStatus(raw) {
     ok: Boolean(data.ok),
     state,
     deepseekConfigured: Boolean(data.deepseekConfigured),
+    voiceConfigured: Boolean(data.voiceConfigured),
     model: typeof data.model === 'string' ? data.model : '',
     activeGiftCount: count,
     promptVersions: data.promptVersions && typeof data.promptVersions === 'object' ? data.promptVersions : {},

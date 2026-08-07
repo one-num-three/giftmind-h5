@@ -4,6 +4,7 @@
  */
 import { generateMockPlan, generateLetter, pickGifts } from '../../mock/planGenerator'
 import { GENERATING_STEPS } from '../../mock/generatingSteps'
+import { composeSummaryBlocks } from '@/utils/summaryCompose'
 import {
   createLocalShare,
   fetchLocalShare,
@@ -33,9 +34,19 @@ export async function getServiceStatus() {
     ok: true,
     state: 'rule_fallback',
     deepseekConfigured: false,
+    voiceConfigured: true,
     model: 'Mock 规则引擎',
     activeGiftCount: 101,
     promptVersions: {},
+  }
+}
+
+export async function generateSummary(answers) {
+  await delay(500)
+  return {
+    requestId: `mock-summary-${Date.now()}`,
+    source: 'rule',
+    summary: composeSummaryBlocks(answers),
   }
 }
 
@@ -97,4 +108,14 @@ export async function sendShareReply(shareId, content) {
 
 export async function fetchShareReplies(query) {
   return listLocalReplies(query)
+}
+
+export async function transcribeVoice(blob, format) {
+  await delay(900)
+  return {
+    transcript: '我们第一次一起看极光，还记得那天的风很大。',
+    confidence: 0.95,
+    segments: [{ start: 0, end: 2.4, text: '我们第一次一起看极光，还记得那天的风很大。' }],
+    source: 'mock',
+  }
 }

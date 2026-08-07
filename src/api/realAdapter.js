@@ -8,13 +8,6 @@ import {
   newRequestId,
   normalizeServiceStatus,
 } from './contracts'
-import {
-  createLocalShare,
-  fetchLocalShare,
-  listLocalReplies,
-  saveLocalReply,
-  updateLocalShare,
-} from './localShareStore'
 
 // 完整方案生成比单字段建议更耗时；前端窗口要覆盖后端 120 秒的
 // 单次耐心请求，否则后端仍在生成时浏览器会先报超时。
@@ -73,6 +66,14 @@ export async function generatePlan(answers, { onProgress, signal } = {}) {
   } finally {
     stop()
   }
+}
+
+export async function generateSummary(answers, { signal } = {}) {
+  return http.post(
+    H5_ENDPOINTS.summaryPlan,
+    { requestId: newRequestId(), answers: normalizePlanningAnswers(answers) },
+    { signal, timeout: 30000 },
+  )
 }
 
 export async function chatOnce({ messages, answers, plan }, { signal } = {}) {
@@ -141,23 +142,55 @@ export async function shuffleGifts() {
 }
 
 export async function createShare(plan, config = {}) {
-  const record = createLocalShare(plan, config)
-  return { ...record, url: `${location.origin}${location.pathname}#/s/${record.shareId}` }
+  const record = await http.post(
+    H5_ENDPOINTS.createShare,
+    { plan: cloneSharePlan(plan), config },
+    { timeout: 30000 },
+  )
+  return { ...record, url: shareUrl(record.shareId) }
 }
 
 export async function updateShare(shareId, plan, config = {}) {
-  const record = updateLocalShare(shareId, plan, config)
-  return { ...record, url: `${location.origin}${location.pathname}#/s/${record.shareId}` }
+  const record = await http.put(
+    `${H5_ENDPOINTS.updateShare}${shareId}`,
+    { plan: cloneSharePlan(plan), config },
+    { timeout: 30000 },
+  )
+  return { ...record, url: shareUrl(record.shareId) }
 }
 
 export async function fetchShare(shareId) {
-  return fetchLocalShare(shareId)
+  return http.get(`${H5_ENDPOINTS.fetchShare}${shareId}`, { timeout: 15000 })
 }
 
 export async function sendShareReply(shareId, content) {
-  return saveLocalReply(shareId, content)
+  return http.post(
+    `${H5_ENDPOINTS.sendShareReply}${shareId}/replies`,
+    { content: String(content || '').slice(0, 300) },
+    { timeout: 15000 },
+  )
 }
 
 export async function fetchShareReplies(query) {
-  return listLocalReplies(query)
+  const q = query && typeof query === 'object' ? query : {}
+  if (q.shareId) return http.get(`${H5_ENDPOINTS.fetchShareReplies}${q.shareId}/replies`, { timeout: 15000 })
+  if (q.planId) return http.get(`${H5_ENDPOINTS.fetchShareReplies}replies?planId=${encodeURIComponent(q.planId)}`, { timeout: 15000 })
+  return []
+}
+
+export async function transcribeVoice(blob, format) {
+  const form = new FormData()
+  const safeFormat = ['webm', 'wav', 'mp3', 'm4a', 'ogg', 'opus'].includes(format) ? format : 'webm'
+  form.append('audio', blob, `voice.${safeFormat}`)
+  form.append('format', safeFormat)
+  return http.post(H5_ENDPOINTS.voiceTranscribe, form, { timeout: 60000 })
+}
+
+function cloneSharePlan(plan) {
+  if (!plan || typeof plan !== 'object') throw new Error('方案不存在，无法生成分享')
+  return JSON.parse(JSON.stringify(plan))
+}
+
+function shareUrl(shareId) {
+  return `${location.origin}${location.pathname}#/s/${shareId}`
 }

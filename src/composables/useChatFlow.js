@@ -124,14 +124,14 @@ export function useChatFlow() {
   async function finish(run) {
     // 已经说过收尾语（比如返回后又进来）就直接走
     if (session.messages.some((m) => m.stepId === DONE_TAG)) {
-      router.replace('/generating')
+      router.replace('/summary')
       return
     }
     const done = await emitMessages([FINISH_TEXT], DONE_TAG, run)
     if (!done) return
     await delay(FINISH_HOLD)
     if (!alive(run)) return
-    router.replace('/generating')
+    router.replace('/summary')
   }
 
   /* ── 推进到下一题 ─────────────────────────────── */
