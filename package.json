@@ -16,6 +16,7 @@
     "lint": "echo \"(占位) 可按需接入 eslint\""
   },
   "dependencies": {
+    "gsap": "^3.13.0",
     "pinia": "^3.0.3",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1"

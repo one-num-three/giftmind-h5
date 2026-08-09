@@ -188,7 +188,7 @@ onUnmounted(() => {
       >
         <GIcon :name="atStart ? 'close' : 'back'" :size="20" />
       </button>
-      <div class="chat__brand">GiftMind</div>
+      <div class="chat__brand" role="heading" aria-level="1" data-route-focus>GiftMind</div>
       <div class="chat__stage">{{ session.stageText }}</div>
     </header>
 
