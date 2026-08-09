@@ -332,7 +332,7 @@ onUnmounted(() => {
             <template v-else>
               <p class="reply__title">你的回话已经送到</p>
               <p class="reply__echo">「{{ repliedText }}」</p>
-              <p class="reply__hint">TA 下次打开的时候就会看见。</p>
+              <p class="reply__hint">送礼的人会在方案里看到。</p>
             </template>
           </div>
         </RevealSection>
