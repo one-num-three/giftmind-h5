@@ -19,6 +19,19 @@ function giftSelectionId(gift) {
   return name ? `legacy:${name}` : ''
 }
 
+function deliveryHeading(plan, giftName) {
+  const recipient = typeof plan?.answers?.recipient === 'string'
+    ? plan.answers.recipient.trim()
+    : ''
+  const recipientLabel = recipient && !/[\/、]/.test(recipient) ? recipient : ''
+  return {
+    title: recipientLabel
+      ? `给${recipientLabel}的「${giftName}」送出方案`
+      : `给 TA 的「${giftName}」送出方案`,
+    subtitle: '已按你最终选中的礼物，重新整理心意表达与送出步骤',
+  }
+}
+
 function friendlyError(error) {
   const code = error?.code
   if (code === 'NETWORK') return '本地策划服务没有启动，请先运行 FastAPI（127.0.0.1:8000）'
@@ -237,7 +250,13 @@ export const usePlanStore = defineStore('plan', {
         if (!result?.letter || !Array.isArray(result?.ritual)) {
           throw new Error('服务没有返回完整的送出方案')
         }
+        const selectedGiftName = String(result.selectedGiftName || selectedGift.name || '这份礼物').trim()
+        const heading = deliveryHeading(this.current, selectedGiftName)
         this.replaceCurrent({
+          recommendationTitle: this.current.recommendationTitle || this.current.title || '',
+          recommendationSubtitle: this.current.recommendationSubtitle || this.current.subtitle || '',
+          title: heading.title,
+          subtitle: heading.subtitle,
           selectedGiftId: id,
           selectedGift,
           letter: clone(result.letter),

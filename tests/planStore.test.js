@@ -70,6 +70,29 @@ describe('plan store', () => {
     expect(store.current.letter.paragraphs[0]).toContain('黄铜书签')
     expect(store.current.ritual[0].title).toContain('黄铜书签')
     expect(store.current.deliverySource).toBe('deepseek')
+    expect(store.current.title).toBe('给妈妈的「黄铜书签」送出方案')
+    expect(store.current.subtitle).toBe('已按你最终选中的礼物，重新整理心意表达与送出步骤')
+    expect(store.current.recommendationTitle).toBe('服务端方案')
+  })
+
+  it('keeps the original recommendation title when the selected gift changes again', async () => {
+    const store = usePlanStore()
+    await store.generate({ recipient: '妈妈' })
+
+    await store.selectGift({ catalogId: 'g1', name: '黄铜书签' })
+    await store.selectGift({ catalogId: 'g2', name: '手写歌单' })
+
+    expect(store.current.title).toBe('给妈妈的「手写歌单」送出方案')
+    expect(store.current.recommendationTitle).toBe('服务端方案')
+  })
+
+  it('uses TA instead of exposing a broad combined recipient label in the title', async () => {
+    const store = usePlanStore()
+    await store.generate({ recipient: '女朋友 / 妻子' })
+
+    await store.selectGift({ catalogId: 'g1', name: '手写歌单' })
+
+    expect(store.current.title).toBe('给 TA 的「手写歌单」送出方案')
   })
 
   it('keeps the current delivery content when selected-gift composition fails', async () => {
