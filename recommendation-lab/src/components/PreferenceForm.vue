@@ -59,7 +59,7 @@ function clearAnswers() {
 }
 
 function submit() {
-  const required = [answers.recipient, answers.recipientAge, answers.occasion, answers.timing, answers.budget, answers.feeling, answers.cityTierCode]
+  const required = [answers.recipient, answers.recipientAge, answers.occasion, answers.timing, answers.budget, answers.feeling]
   if (required.some((value) => !value) || answers.personality.length === 0) {
     validationMessage.value = '请完成所有标注“必选”的项目。'
     return
@@ -215,9 +215,9 @@ function submit() {
       </fieldset>
 
       <label class="control">
-        <span>活动城市层级 <b>必选</b></span>
+        <span>活动城市层级 <i>可选，规则待校准</i></span>
         <select v-model="answers.cityTierCode" :disabled="loading">
-          <option v-for="option in cityTierOptions" :key="option.value || 'empty'" :value="option.value" :disabled="!option.value">
+          <option v-for="option in cityTierOptions" :key="option.value || 'empty'" :value="option.value">
             {{ option.label }}
           </option>
         </select>

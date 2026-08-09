@@ -13,6 +13,6 @@ describe('planning conversation safety branches', () => {
 
     expect(ids).not.toContain('style')
     expect(ids).toContain('all_participants_adults')
-    expect(ids).toContain('city_tier_code')
+    expect(ids).not.toContain('city_tier_code')
   })
 })

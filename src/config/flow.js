@@ -213,21 +213,6 @@ export const CHAT_FLOW = [
     ],
     summary: (value) => (value ? '是，参与者全部成年' : '否 / 还不确定'),
   },
-  {
-    id: 'city_tier_code',
-    stage: 'shape',
-    key: 'cityTierCode',
-    type: 'single',
-    messages: [
-      '活动会在哪一类城市进行？',
-      '我会据此过滤当地通常难以找到的体验，具体门店和档期仍需要下单前确认。',
-    ],
-    options: [
-      { value: 'tier_1', label: '一线城市', hint: '北京 / 上海 / 广州 / 深圳', emoji: '🏙️' },
-      { value: 'tier_2', label: '二线城市', hint: '省会、新一线与强二线城市', emoji: '🌆' },
-      { value: 'tier_3_or_below', label: '三线及以下', hint: '其他地级市、县城与城镇', emoji: '🏘️' },
-    ],
-  },
 ]
 
 /** 按条件过滤出本次会话真正要走的步骤 */

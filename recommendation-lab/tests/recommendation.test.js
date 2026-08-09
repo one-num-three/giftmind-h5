@@ -86,7 +86,6 @@ describe('preference templates', () => {
       example.timing,
       example.budget,
       example.feeling,
-      example.cityTierCode,
     ].every(Boolean)).toBe(true)
     expect(example.personality.length).toBeGreaterThan(0)
     expect(example.allParticipantsAdults).toBe(true)
