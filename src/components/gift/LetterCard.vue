@@ -20,6 +20,7 @@ const ui = useUiStore()
 
 /** 可选语气。match 用来把 letter.tone（可能是模板自带的说法）归到某一档上 */
 const TONES = [
+  { key: '现代诗意', label: '现代诗意', hint: '有画面、有留白，像写给一个人', match: ['现代诗', '诗意', 'modern_poetic', '自然'] },
   { key: '克制真诚', label: '克制真诚', hint: '少说一点，但每句都算数', match: ['克制', '真诚'] },
   { key: '俏皮', label: '俏皮', hint: '轻一点，带一句玩笑', match: ['俏皮', '轻快', '轻松', '狡黠', '有梗'] },
   { key: '郑重', label: '郑重', hint: '一字一句，认真讲完', match: ['郑重', '正式', '认真'] },
@@ -69,7 +70,7 @@ async function onCopy() {
 
 function pickTone(key) {
   sheetOpen.value = false
-  if (!key || key === currentToneKey.value) return
+  if (!key) return
   emit('change-tone', key)
 }
 </script>

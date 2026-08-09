@@ -25,6 +25,7 @@ export const GENERATION_STAGES = Object.freeze([
 ])
 
 export const LETTER_TONES = Object.freeze({
+  现代诗意: 'modern_poetic',
   克制真诚: 'restrained',
   温暖: 'warm',
   俏皮: 'playful',

@@ -551,7 +551,10 @@ function fitParagraph(text, nextFiller, min = 40, max = 80) {
 
 function resolveTone(tone, group) {
   const t = str(tone)
-  if (!t) return { label: group.tone, overlay: null }
+  if (!t) {
+    const modern = TONE_OVERLAYS.find((o) => o.key === 'modern_poetic')
+    return { label: modern?.label || '现代诗意', overlay: modern || null }
+  }
   const hit = TONE_OVERLAYS.find((o) => o.key === t || o.label === t || o.keys.some((k) => t.includes(k)))
   return hit ? { label: hit.label, overlay: hit } : { label: group.tone, overlay: null }
 }

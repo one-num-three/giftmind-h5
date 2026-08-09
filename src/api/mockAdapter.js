@@ -97,9 +97,9 @@ export async function composeDelivery(plan, selectedGift) {
   const isActivity = kind === 'activity' || String(selectedGift?.category || '').includes('体验')
   const currentLetter = plan?.letter || {}
   const paragraphs = []
-  if (memory) paragraphs.push(`我一直记得，${/[。！？!?]$/.test(memory) ? memory : `${memory}。`}`)
-  paragraphs.push(`${occasion ? `这次${occasion}` : '这次'}，我想把「${name}」认真准备给你。`)
-  paragraphs.push(feeling ? `希望你收到时，能感受到${feeling}。` : '希望你收到时，能感受到这份心意。')
+  if (memory) paragraphs.push(`你说起那件事的时候，我记住了：${/[。！？!?]$/.test(memory) ? memory : `${memory}。`}`)
+  paragraphs.push(occasion ? `${occasion}快乐。想把「${name}」放到你手里。` : `想把「${name}」放到你手里。`)
+  paragraphs.push(feeling ? `愿它替我陪你一会儿，也让你感到${feeling}。` : '愿它替我陪你一会儿。剩下的话，等见面再说。')
 
   return {
     source: 'rule_fallback',
@@ -111,7 +111,7 @@ export async function composeDelivery(plan, selectedGift) {
       salutation: currentLetter.salutation || '给你：',
       paragraphs,
       signature: currentLetter.signature || '—— 我',
-      tone: currentLetter.tone || '自然',
+      tone: currentLetter.tone || '现代诗意',
     },
     ritual: isActivity
       ? [

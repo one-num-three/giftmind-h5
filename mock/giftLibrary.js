@@ -2223,6 +2223,13 @@ export const RELATIONSHIP_LINES = {
 /** 语气覆盖：regenerateLetter 传入的 tone 会命中这里 */
 export const TONE_OVERLAYS = [
   {
+    key: 'modern_poetic',
+    label: '现代诗意',
+    keys: ['现代诗意', '现代诗', '诗意', '自然'],
+    salutationSuffix: '：',
+    extra: ['不急着解释，让这句话在这里停一停。', '还有一点心意，留到见面的时候再说。'],
+  },
+  {
     key: 'playful',
     label: '俏皮',
     keys: ['俏皮', '轻松', '幽默', '搞笑', '有梗', '活泼'],
