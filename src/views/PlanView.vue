@@ -322,6 +322,19 @@ const sourceText = computed(() => {
   if (plan.value.source === 'rule_fallback') return '规则模式生成'
   return text(plan.value.source)
 })
+const deliveryStatus = computed(() => {
+  const giftName = text(plan.value?.selectedGift?.name)
+  if (!giftName) return null
+  const source = text(plan.value?.deliverySource)
+  let detail = '已根据最终选择更新信件与送出步骤'
+  if (source === 'deepseek') detail = 'DeepSeek 实时生成，并经过礼物一致性校验'
+  if (source === 'rule_fallback') detail = 'AI 结果未通过校验，已自动换成稳妥模板'
+  if (source === 'mock') detail = '当前为本地演示内容'
+  return {
+    title: `已按「${giftName}」重新整理`,
+    detail,
+  }
+})
 const replies = computed(() => planStore.replies || [])
 
 /* ── 分享 / 更多 ──────────────────────────── */
@@ -566,6 +579,13 @@ onUnmounted(() => {
 
         <!-- 信 -->
         <section v-if="letter || letterLoading" ref="deliveryRef" class="sec anim-up d-3">
+          <div v-if="deliveryStatus" class="delivery-status" role="status" aria-live="polite">
+            <GIcon name="check" :size="16" />
+            <div>
+              <strong>{{ deliveryStatus.title }}</strong>
+              <span>{{ deliveryStatus.detail }}</span>
+            </div>
+          </div>
           <p class="section-label">替你写的信</p>
           <LetterCard :letter="letter || {}" :loading="letterLoading" @change-tone="onChangeTone" />
         </section>
@@ -942,6 +962,36 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--s-3);
+}
+
+.delivery-status {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--s-2);
+  margin-bottom: var(--s-5);
+  padding: var(--s-3) 0;
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-sage-deep);
+}
+.delivery-status > :deep(svg) {
+  margin-top: 2px;
+}
+.delivery-status strong,
+.delivery-status span {
+  display: block;
+}
+.delivery-status strong {
+  color: var(--c-ink);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  line-height: var(--lh-tight);
+}
+.delivery-status span {
+  margin-top: 4px;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  line-height: var(--lh-normal);
 }
 
 .ranking-switch {
