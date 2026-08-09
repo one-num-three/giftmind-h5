@@ -32,6 +32,7 @@ const BOW_PATHS = [
 /* ── 阶段观察 ─────────────────────────────── */
 const seen = ref([]) // 到达过的阶段，按顺序去重
 const finished = ref(false)
+const applyingRecovery = ref('')
 
 const EXPECTED_TOTAL = Array.isArray(GENERATING_STEPS) ? GENERATING_STEPS.length : 5
 
@@ -69,6 +70,13 @@ const percent = computed(() => {
 /** 中央文案：出错 / 完成 / 当前阶段 / 起步兜底，永远有内容 */
 const headline = computed(() => {
   if (planStore.error) {
+    if (planStore.generationIssue) {
+      return {
+        key: '__recoverable',
+        label: '差一个条件，就能继续',
+        hint: '不是你填错了，当前条件暂时凑不齐两种方案',
+      }
+    }
     return { key: '__error', label: '这一份没能生成出来', hint: planStore.error }
   }
   if (finished.value) {
@@ -91,6 +99,14 @@ const serviceHint = computed(() => {
   if (status.state === 'empty_catalog') return '礼物库暂无可用数据'
   if (status.state === 'rule_fallback') return 'DeepSeek 未配置，将使用规则模式'
   return `${status.model || 'DeepSeek'} 已连接 · ${status.activeGiftCount} 件候选礼物`
+})
+
+const issue = computed(() => planStore.generationIssue)
+const recoveryOptions = computed(() => issue.value?.recoveryOptions || [])
+const editSuggestions = computed(() => issue.value?.editSuggestions || [])
+const missingKindText = computed(() => {
+  const labels = (issue.value?.missingKinds || []).map((item) => item.label).filter(Boolean)
+  return labels.length ? labels.join('和') : '实物礼物和体验活动的组合'
 })
 
 /* ── 丝带成形：把进度切成四段，逐笔画出来 ──── */
@@ -146,12 +162,31 @@ async function run() {
 
 function retry() {
   if (!alive) return
-  planStore.error = ''
+  planStore.clearGenerationError()
   run()
 }
 
 function backToChat() {
-  planStore.error = ''
+  planStore.clearGenerationError()
+  router.replace('/chat')
+}
+
+async function applyRecovery(option) {
+  if (!alive || !option?.id || applyingRecovery.value) return
+  if (!session.applyRecoveryPatch(option.answerPatch)) return
+  applyingRecovery.value = option.id
+  planStore.clearGenerationError()
+  try {
+    await run()
+  } finally {
+    applyingRecovery.value = ''
+  }
+}
+
+function editFrom(stepId) {
+  if (!stepId) return
+  planStore.clearGenerationError()
+  session.revisit(stepId)
   router.replace('/chat')
 }
 
@@ -171,7 +206,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="page gen">
+  <div class="page gen" :class="{ 'has-issue': issue }">
     <div class="gen__bg grain" aria-hidden="true">
       <span class="glow gen__glow gen__glow--rose" />
       <span class="glow gen__glow gen__glow--sand" />
@@ -181,7 +216,7 @@ onUnmounted(() => {
     <div class="page__body gen__body">
       <div class="gen__stack">
         <!-- ══ 中央：正在成形的丝带 ══ -->
-        <div class="figure" :class="{ 'is-error': planStore.error }" aria-hidden="true">
+        <div v-if="!planStore.error" class="figure" aria-hidden="true">
           <span class="figure__halo" />
 
           <svg class="figure__ring" viewBox="0 0 200 200" fill="none">
@@ -234,7 +269,64 @@ onUnmounted(() => {
         </p>
 
         <!-- ══ 失败：给出口 ══ -->
-        <div v-if="planStore.error" class="fail">
+        <section v-if="issue" class="recovery" aria-labelledby="recovery-title">
+          <div class="recovery__intro">
+            <p id="recovery-title">目前缺少：{{ missingKindText }}</p>
+            <span>系统没有偷偷放宽你的年龄与避雷条件。</span>
+          </div>
+
+          <div v-if="recoveryOptions.length" class="recovery__group">
+            <p class="recovery__eyebrow">一键调整后继续</p>
+            <button
+              v-for="option in recoveryOptions"
+              :key="option.id"
+              type="button"
+              class="recovery__option"
+              :disabled="Boolean(applyingRecovery)"
+              @click="applyRecovery(option)"
+            >
+              <span>
+                <strong>{{ option.label }}</strong>
+                <small>{{ option.description }}</small>
+              </span>
+              <GIcon :name="applyingRecovery === option.id ? 'refresh' : 'arrowRight'" :size="17" />
+            </button>
+          </div>
+
+          <div v-if="editSuggestions.length" class="recovery__group">
+            <p class="recovery__eyebrow">也可以亲自确认</p>
+            <button
+              v-for="suggestion in editSuggestions"
+              :key="suggestion.stepId"
+              type="button"
+              class="recovery__edit"
+              @click="editFrom(suggestion.stepId)"
+            >
+              <span>
+                <strong>{{ suggestion.label }}</strong>
+                <small>{{ suggestion.description }}</small>
+              </span>
+              <GIcon name="chevron" :size="16" />
+            </button>
+          </div>
+
+          <details v-if="issue.causes.length" class="recovery__details">
+            <summary>查看哪些条件挡住了候选</summary>
+            <dl>
+              <div v-for="cause in issue.causes" :key="cause.code">
+                <dt>{{ cause.label }}</dt>
+                <dd>{{ cause.count }} 个</dd>
+              </div>
+            </dl>
+          </details>
+
+          <div class="recovery__fallback">
+            <button type="button" @click="retry">原条件再试一次</button>
+            <button type="button" @click="backToChat">返回逐项修改</button>
+          </div>
+        </section>
+
+        <div v-else-if="planStore.error" class="fail">
           <GButton variant="primary" size="md" @click="retry">
             <GIcon name="refresh" :size="16" />
             再试一次
@@ -266,6 +358,9 @@ onUnmounted(() => {
 <style scoped>
 .gen {
   overflow: hidden;
+}
+.gen.has-issue {
+  overflow-y: auto;
 }
 
 /* ══ 背景：奶油白 + 柔光 ══════════════════════ */
@@ -321,6 +416,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  max-width: 560px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* ══ 中央图形 ═══════════════════════════════ */
@@ -562,6 +660,137 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: var(--s-2);
+}
+
+.recovery {
+  width: 100%;
+  margin-top: var(--s-5);
+  padding: var(--s-4);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--c-surface) 94%, transparent);
+  box-shadow: var(--sh-2);
+  text-align: left;
+}
+.recovery__intro p {
+  color: var(--c-ink);
+  font-family: var(--f-serif);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+}
+.recovery__intro span {
+  display: block;
+  margin-top: 5px;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+}
+.recovery__group {
+  margin-top: var(--s-4);
+}
+.recovery__eyebrow {
+  margin-bottom: var(--s-2);
+  color: var(--c-ink-4);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--ls-wide);
+}
+.recovery__option,
+.recovery__edit {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-paper);
+  color: var(--c-ink);
+  text-align: left;
+}
+.recovery__option + .recovery__option,
+.recovery__edit + .recovery__edit {
+  margin-top: var(--s-2);
+}
+.recovery__option:hover,
+.recovery__option:focus-visible {
+  border-color: var(--c-rose);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-rose) 12%, transparent);
+}
+.recovery__option:disabled {
+  opacity: 0.62;
+}
+.recovery__option strong,
+.recovery__edit strong {
+  display: block;
+  font-size: var(--fs-caption);
+  line-height: 1.45;
+}
+.recovery__option small,
+.recovery__edit small {
+  display: block;
+  margin-top: 3px;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  line-height: 1.5;
+}
+.recovery__edit {
+  min-height: 56px;
+  border-color: transparent;
+  background: var(--c-paper-2);
+}
+.recovery__details {
+  margin-top: var(--s-4);
+  border-top: 1px solid var(--c-line);
+  padding-top: var(--s-3);
+}
+.recovery__details summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--c-ink-3);
+  font-size: var(--fs-caption);
+}
+.recovery__details dl {
+  display: grid;
+  gap: 7px;
+  padding: 4px 0 var(--s-2);
+}
+.recovery__details dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s-3);
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+}
+.recovery__fallback {
+  display: flex;
+  justify-content: center;
+  gap: var(--s-4);
+  margin-top: var(--s-3);
+}
+.recovery__fallback button {
+  min-height: 40px;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.has-issue .gen__body {
+  overflow: visible;
+  padding-top: var(--s-6);
+  padding-bottom: calc(var(--s-8) + 54px);
+}
+.has-issue .gen__stack {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.has-issue .head {
+  margin-top: var(--s-2);
 }
 
 /* ══ 底部进度 ═══════════════════════════════ */

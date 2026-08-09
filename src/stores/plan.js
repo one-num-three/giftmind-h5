@@ -24,6 +24,30 @@ function friendlyError(error) {
   return error?.message || '生成失败，请重试'
 }
 
+export function normalizeGenerationIssue(error) {
+  if (error?.code !== 'NO_CANDIDATES') return null
+  const detail = error?.payload?.detail
+  if (!detail || typeof detail !== 'object') return null
+  const list = (value) => (
+    Array.isArray(value) ? value.filter((item) => item && typeof item === 'object') : []
+  )
+  return {
+    code: 'NO_CANDIDATES',
+    message: typeof detail.message === 'string' ? detail.message : friendlyError(error),
+    eligibleCount: Number(detail.eligibleCount || 0),
+    kindCounts: detail.kindCounts && typeof detail.kindCounts === 'object' ? clone(detail.kindCounts) : {},
+    catalogKindCounts:
+      detail.catalogKindCounts && typeof detail.catalogKindCounts === 'object'
+        ? clone(detail.catalogKindCounts)
+        : {},
+    missingKinds: list(detail.missingKinds),
+    causes: list(detail.causes),
+    recoveryOptions: list(detail.recoveryOptions),
+    editSuggestions: list(detail.editSuggestions),
+    questions: Array.isArray(detail.questions) ? detail.questions.map(String).filter(Boolean) : [],
+  }
+}
+
 export const usePlanStore = defineStore('plan', {
   state: () => ({
     current: null,
@@ -31,6 +55,7 @@ export const usePlanStore = defineStore('plan', {
     editing: false,
     progressStage: null,
     error: '',
+    generationIssue: null,
     serviceStatus: null,
     likedGiftIds: [],
     lockedGiftIds: [],
@@ -81,6 +106,7 @@ export const usePlanStore = defineStore('plan', {
     async generate(answers) {
       this.generating = true
       this.error = ''
+      this.generationIssue = null
       this.progressStage = null
       await this.refreshServiceStatus()
       try {
@@ -102,6 +128,7 @@ export const usePlanStore = defineStore('plan', {
         return this.current
       } catch (error) {
         this.error = friendlyError(error)
+        this.generationIssue = normalizeGenerationIssue(error)
         throw error
       } finally {
         this.generating = false
@@ -202,6 +229,11 @@ export const usePlanStore = defineStore('plan', {
       else this.lockedGiftIds.push(id)
     },
 
+    clearGenerationError() {
+      this.error = ''
+      this.generationIssue = null
+    },
+
     async loadReplies() {
       this.replies = this.current?.id ? await api.fetchShareReplies({ planId: this.current.id }) : []
       return this.replies
@@ -221,6 +253,7 @@ export const usePlanStore = defineStore('plan', {
     clear() {
       this.current = null
       this.error = ''
+      this.generationIssue = null
       this.likedGiftIds = []
       this.lockedGiftIds = []
       this.replies = []

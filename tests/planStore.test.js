@@ -45,4 +45,34 @@ describe('plan store', () => {
     expect(store.current.ritual).toEqual([{ title: '新步骤' }])
     expect(store.current.gifts[0].catalogId).toBe('g1')
   })
+
+  it('preserves structured no-candidate recovery details for the UI', async () => {
+    apiMock.generatePlan.mockRejectedValueOnce({
+      code: 'NO_CANDIDATES',
+      message: '暂时凑不齐两种方案',
+      payload: {
+        detail: {
+          code: 'NO_CANDIDATES',
+          message: '暂时凑不齐两种方案',
+          missingKinds: [{ code: 'activity', label: '体验活动' }],
+          causes: [{ code: 'over_budget', label: '超过当前预算', count: 8 }],
+          recoveryOptions: [{
+            id: 'relax_budget',
+            label: '把预算改为 ¥300–600',
+            answerPatch: { budget: '¥300–600' },
+          }],
+          editSuggestions: [],
+        },
+      },
+    })
+    const store = usePlanStore()
+
+    await expect(store.generate({ budget: '¥150–300' })).rejects.toBeTruthy()
+
+    expect(store.generationIssue.missingKinds[0].label).toBe('体验活动')
+    expect(store.generationIssue.recoveryOptions[0].answerPatch).toEqual({ budget: '¥300–600' })
+    store.clearGenerationError()
+    expect(store.error).toBe('')
+    expect(store.generationIssue).toBeNull()
+  })
 })

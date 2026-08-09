@@ -8,6 +8,7 @@ import { uid } from '@/utils/helpers'
 import storage from '@/utils/storage'
 
 const DRAFT_KEY = 'gm_draft_session'
+const RECOVERY_FIELDS = new Set(['budget', 'timing'])
 
 export const useSessionStore = defineStore('session', {
   state: () => ({
@@ -96,6 +97,18 @@ export const useSessionStore = defineStore('session', {
         if (editText) this.answers[field] = editText
       }
       this.persistDraft()
+    },
+
+    /** 应用服务端验证过的安全恢复项；年龄、对象和禁忌不允许在这里被静默修改。 */
+    applyRecoveryPatch(patch) {
+      let changed = false
+      for (const [key, value] of Object.entries(patch || {})) {
+        if (!RECOVERY_FIELDS.has(key) || value == null || value === '') continue
+        this.answers[key] = value
+        changed = true
+      }
+      if (changed) this.persistDraft()
+      return changed
     },
 
     /** 从指定问题重新确认，避免把展示摘要反向写进结构化字段。 */

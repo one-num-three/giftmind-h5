@@ -82,4 +82,28 @@ describe('planning answer contract', () => {
     expect(store.answers.budget).toBeUndefined()
     expect(store.answers.feeling).toBeUndefined()
   })
+
+  it('applies only safe fields from a no-candidate recovery option', () => {
+    const store = useSessionStore()
+    store.start(true)
+    store.answers = {
+      recipient: '闺蜜 / 好友',
+      recipientAge: '26–40岁',
+      budget: '¥50–150',
+      timing: '一周内',
+      taboo: ['不要吃的'],
+    }
+
+    expect(store.applyRecoveryPatch({
+      budget: '¥150–300',
+      timing: '两到四周',
+      taboo: [],
+      recipientAge: '成年人',
+    })).toBe(true)
+
+    expect(store.answers.budget).toBe('¥150–300')
+    expect(store.answers.timing).toBe('两到四周')
+    expect(store.answers.taboo).toEqual(['不要吃的'])
+    expect(store.answers.recipientAge).toBe('26–40岁')
+  })
 })
