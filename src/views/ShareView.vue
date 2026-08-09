@@ -20,7 +20,7 @@ import api from '@/api'
 import { useUiStore } from '@/stores/ui'
 import EnvelopeCover from '@/components/share/EnvelopeCover.vue'
 import RevealSection from '@/components/share/RevealSection.vue'
-import { giftsForShare } from '@/utils/sharePlan'
+import { giftsForShare, recipientGiftReason } from '@/utils/sharePlan'
 
 const route = useRoute()
 const router = useRouter()
@@ -134,7 +134,7 @@ function giftWhy(g) {
   const raw = text(g.why)
   if (!raw) return ''
   const trimmed = raw.replace(SENDER_VOICE, '').trim()
-  return trimmed.length >= 12 ? trimmed : raw
+  return recipientGiftReason(trimmed.length >= 12 ? trimmed : raw)
 }
 function ritualTime(r) {
   return text(r.time)

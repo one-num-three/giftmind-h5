@@ -21,3 +21,11 @@ export function giftsForShare(plan = {}) {
   }
   return direct
 }
+
+export function recipientGiftReason(value) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (!text) return ''
+  return text
+    .replace(/\s*(?:TA|Ta|ta)\s*/g, '你')
+    .replace(/(^|[^其吉])[他她](?!们)/g, '$1你')
+}
