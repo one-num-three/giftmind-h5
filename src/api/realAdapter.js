@@ -4,6 +4,7 @@ import {
   GENERATION_STAGES,
   H5_ENDPOINTS,
   LETTER_TONES,
+  assertDeliveryComposition,
   assertPlan,
   newRequestId,
   normalizeServiceStatus,
@@ -157,6 +158,21 @@ export async function rewriteRitual(plan, { instruction = '' } = {}) {
     },
     { timeout: 60000 },
   )
+}
+
+export async function composeDelivery(plan, selectedGift, { signal } = {}) {
+  const result = await http.post(
+    H5_ENDPOINTS.composeDelivery,
+    {
+      requestId: newRequestId(),
+      answers: normalizePlanningAnswers(plan?.answers),
+      selectedGift: selectedGift || {},
+      currentLetter: plan?.letter || null,
+      currentRitual: Array.isArray(plan?.ritual) ? plan.ritual : [],
+    },
+    { signal, timeout: PLAN_GENERATION_TIMEOUT },
+  )
+  return assertDeliveryComposition(result)
 }
 
 export async function shuffleGifts() {

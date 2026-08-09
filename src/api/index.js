@@ -35,6 +35,9 @@ export const replaceGift = (...args) => adapter.replaceGift(...args)
 /** 只重写仪式，不修改礼物和信件。 */
 export const rewriteRitual = (...args) => adapter.rewriteRitual(...args)
 
+/** 围绕用户最终选中的礼物，重写信件与送出步骤。 */
+export const composeDelivery = (...args) => adapter.composeDelivery(...args)
+
 /** 换一批礼物 */
 export const shuffleGifts = (...args) => adapter.shuffleGifts(...args)
 
@@ -62,6 +65,7 @@ export default {
   regenerateLetter,
   replaceGift,
   rewriteRitual,
+  composeDelivery,
   shuffleGifts,
   createShare,
   updateShare,

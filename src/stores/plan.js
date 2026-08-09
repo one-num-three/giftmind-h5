@@ -12,6 +12,13 @@ function giftId(gift) {
   return gift?.catalogId || gift?.id || ''
 }
 
+function giftSelectionId(gift) {
+  const id = giftId(gift)
+  if (id) return id
+  const name = typeof gift?.name === 'string' ? gift.name.trim() : ''
+  return name ? `legacy:${name}` : ''
+}
+
 function friendlyError(error) {
   const code = error?.code
   if (code === 'NETWORK') return '本地策划服务没有启动，请先运行 FastAPI（127.0.0.1:8000）'
@@ -53,6 +60,7 @@ export const usePlanStore = defineStore('plan', {
     current: null,
     generating: false,
     editing: false,
+    selectingGiftId: '',
     progressStage: null,
     error: '',
     generationIssue: null,
@@ -217,6 +225,36 @@ export const usePlanStore = defineStore('plan', {
       }
     },
 
+    async selectGift(gift) {
+      const id = giftSelectionId(gift)
+      if (!this.current || !id || this.selectingGiftId) return null
+      const selectedGift = clone(gift)
+      if (!giftId(selectedGift)) selectedGift.catalogId = id
+      this.selectingGiftId = id
+      this.error = ''
+      try {
+        const result = await api.composeDelivery(clone(this.current), selectedGift)
+        if (!result?.letter || !Array.isArray(result?.ritual)) {
+          throw new Error('服务没有返回完整的送出方案')
+        }
+        this.replaceCurrent({
+          selectedGiftId: id,
+          selectedGift,
+          letter: clone(result.letter),
+          ritual: clone(result.ritual),
+          deliverySource: result.source || '',
+          deliveryModel: result.model || '',
+          deliveryPromptVersion: result.promptVersion || '',
+        })
+        return result
+      } catch (error) {
+        this.error = friendlyError(error)
+        throw error
+      } finally {
+        this.selectingGiftId = ''
+      }
+    },
+
     toggleLike(id) {
       const index = this.likedGiftIds.indexOf(id)
       if (index >= 0) this.likedGiftIds.splice(index, 1)
@@ -241,6 +279,7 @@ export const usePlanStore = defineStore('plan', {
 
     setCurrent(plan) {
       this.current = plan ? clone(plan) : null
+      this.selectingGiftId = ''
       this.loadReplies()
     },
 
@@ -254,6 +293,7 @@ export const usePlanStore = defineStore('plan', {
       this.current = null
       this.error = ''
       this.generationIssue = null
+      this.selectingGiftId = ''
       this.likedGiftIds = []
       this.lockedGiftIds = []
       this.replies = []

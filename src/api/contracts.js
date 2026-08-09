@@ -6,6 +6,7 @@ export const H5_ENDPOINTS = Object.freeze({
   replaceGift: '/plans/gifts/replace',
   rewriteLetter: '/plans/letter/rewrite',
   rewriteRitual: '/plans/ritual/rewrite',
+  composeDelivery: '/plans/delivery/compose',
   chat: '/chat',
   createShare: '/shares',
   updateShare: '/shares/',
@@ -81,5 +82,14 @@ export function assertPlan(raw) {
   }
   if (!raw.letter || typeof raw.letter !== 'object') throw new Error('服务返回的信件格式不正确')
   if (!Array.isArray(raw.ritual)) throw new Error('服务返回的仪式流程格式不正确')
+  return raw
+}
+
+export function assertDeliveryComposition(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('服务没有返回送出方案')
+  if (!raw.letter || typeof raw.letter !== 'object') throw new Error('服务返回的信件格式不正确')
+  if (!Array.isArray(raw.ritual) || !raw.ritual.length) {
+    throw new Error('服务返回的送出步骤格式不正确')
+  }
   return raw
 }

@@ -92,6 +92,7 @@ const activeRankingGroup = computed(() => (
 ))
 const displayedGifts = computed(() => activeRankingGroup.value?.candidates || comparisonGifts.value)
 const selectedGiftId = computed(() => text(plan.value?.selectedGiftId))
+const selectingGiftId = computed(() => text(planStore.selectingGiftId))
 const deliveryRef = ref(null)
 
 watch(rankingGroups, (groups) => {
@@ -191,7 +192,10 @@ function isLiked(id) {
 }
 
 function giftKey(gift) {
-  return gift?.catalogId || gift?.id || ''
+  const id = gift?.catalogId || gift?.id
+  if (id) return id
+  const name = text(gift?.name)
+  return name ? `legacy:${name}` : ''
 }
 
 function isLocked(id) {
@@ -226,11 +230,20 @@ function onToggleLock(id) {
 
 async function onSelectGift(gift) {
   const id = giftKey(gift)
-  if (!id) return
+  if (!id || selectingGiftId.value) return
   const wasSelected = selectedGiftId.value === id
-  planStore.replaceCurrent({ selectedGiftId: id, selectedGift: gift })
-  if (!isLocked(id)) planStore.toggleLock(id)
-  ui.success(wasSelected ? '这就是你选中的礼物' : '已选中，来看怎么送')
+  if (!wasSelected) {
+    try {
+      await planStore.selectGift(gift)
+      if (!isLocked(id)) planStore.toggleLock(id)
+      ui.success('已按这件礼物整理好信件和送出步骤')
+    } catch (error) {
+      ui.error(planStore.error || error?.message || '这次没整理好，请稍后再试')
+      return
+    }
+  } else {
+    ui.success('这就是你选中的礼物')
+  }
   await nextTick()
   if (!wasSelected && !reducedMotion()) {
     await new Promise((resolve) => window.setTimeout(resolve, 360))
@@ -533,11 +546,13 @@ onUnmounted(() => {
                 :liked="isLiked(giftKey(g))"
                 :locked="isLocked(giftKey(g))"
                 :selected="selectedGiftId === giftKey(g)"
+                :selecting="selectingGiftId === giftKey(g)"
+                :selection-busy="Boolean(selectingGiftId)"
                 :replacing="replacingId === giftKey(g)"
                 @toggle-like="onToggleLike"
                 @toggle-lock="onToggleLock"
                 @replace="openReplace"
-                @select="onSelectGift"
+                @choose="onSelectGift"
               />
             </div>
             <GEmpty

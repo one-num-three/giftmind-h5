@@ -13,6 +13,15 @@ const { apiMock } = vi.hoisted(() => ({ apiMock: {
   replaceGift: vi.fn(async () => ({ gift: { id: 'g2', catalogId: 'g2' } })),
   regenerateLetter: vi.fn(async () => ({ letter: { paragraphs: ['新正文'] } })),
   rewriteRitual: vi.fn(async () => ({ ritual: [{ title: '新步骤' }] })),
+  composeDelivery: vi.fn(async (_plan, gift) => ({
+    source: 'deepseek',
+    model: 'deepseek-v4-flash',
+    promptVersion: 'delivery_compose_v4',
+    selectedCatalogId: gift.catalogId,
+    selectedGiftName: gift.name,
+    letter: { paragraphs: [`围绕${gift.name}的新正文`] },
+    ritual: [{ title: `准备${gift.name}` }],
+  })),
   fetchShareReplies: vi.fn(async () => []),
 } }))
 vi.mock('@/api', () => ({ default: apiMock }))
@@ -44,6 +53,49 @@ describe('plan store', () => {
     expect(store.current.letter.paragraphs).toEqual(['新正文'])
     expect(store.current.ritual).toEqual([{ title: '新步骤' }])
     expect(store.current.gifts[0].catalogId).toBe('g1')
+  })
+
+  it('commits the selected gift only after its delivery plan succeeds', async () => {
+    const store = usePlanStore()
+    await store.generate({ recipient: '妈妈' })
+    const gift = { id: 'g1', catalogId: 'g1', name: '黄铜书签' }
+
+    const pending = store.selectGift(gift)
+    expect(store.selectingGiftId).toBe('g1')
+    expect(store.current.selectedGiftId).toBeUndefined()
+    await pending
+
+    expect(store.selectingGiftId).toBe('')
+    expect(store.current.selectedGiftId).toBe('g1')
+    expect(store.current.letter.paragraphs[0]).toContain('黄铜书签')
+    expect(store.current.ritual[0].title).toContain('黄铜书签')
+    expect(store.current.deliverySource).toBe('deepseek')
+  })
+
+  it('keeps the current delivery content when selected-gift composition fails', async () => {
+    apiMock.composeDelivery.mockRejectedValueOnce(new Error('模型暂时不可用'))
+    const store = usePlanStore()
+    await store.generate({ recipient: '妈妈' })
+    const before = JSON.parse(JSON.stringify(store.current))
+
+    await expect(store.selectGift({ catalogId: 'g1', name: '黄铜书签' })).rejects.toThrow('模型暂时不可用')
+
+    expect(store.selectingGiftId).toBe('')
+    expect(store.current).toEqual(before)
+    expect(store.error).toBe('模型暂时不可用')
+  })
+
+  it('keeps legacy name-only recommendations selectable', async () => {
+    const store = usePlanStore()
+    await store.generate({ recipient: '妈妈' })
+
+    await store.selectGift({ name: '旧方案里的礼物' })
+
+    expect(apiMock.composeDelivery).toHaveBeenLastCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ catalogId: 'legacy:旧方案里的礼物' }),
+    )
+    expect(store.current.selectedGiftId).toBe('legacy:旧方案里的礼物')
   })
 
   it('preserves structured no-candidate recovery details for the UI', async () => {

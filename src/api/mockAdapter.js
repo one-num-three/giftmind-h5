@@ -79,6 +79,52 @@ export async function rewriteRitual(plan, { instruction = '' } = {}) {
   )
 }
 
+export async function composeDelivery(plan, selectedGift) {
+  await delay(900)
+  const answers = plan?.answers || {}
+  const name = String(selectedGift?.name || '这份礼物').trim()
+  const id = selectedGift?.catalogId || selectedGift?.id || ''
+  const memory = String(answers.memory || '').trim()
+    .replaceAll('TA', '你')
+    .replace(/(^|[^其吉])[他她](?!们)/g, '$1你')
+  const feeling = String(answers.feeling || '').trim()
+    .replaceAll('TA', '你')
+    .replace(/(^|[^其吉])[他她](?!们)/g, '$1你')
+    .replace(/^(?:(?:我)?想让|希望)你(?:感到|觉得)?/, '')
+    .replace(/[，。 ]+$/g, '')
+  const occasion = String(answers.occasion || '').trim()
+  const kind = String(selectedGift?.kind || selectedGift?.giftTypeCode || '').toLowerCase()
+  const isActivity = kind === 'activity' || String(selectedGift?.category || '').includes('体验')
+  const currentLetter = plan?.letter || {}
+  const paragraphs = []
+  if (memory) paragraphs.push(`我一直记得，${/[。！？!?]$/.test(memory) ? memory : `${memory}。`}`)
+  paragraphs.push(`${occasion ? `这次${occasion}` : '这次'}，我想把「${name}」认真准备给你。`)
+  paragraphs.push(feeling ? `希望你收到时，能感受到${feeling}。` : '希望你收到时，能感受到这份心意。')
+
+  return {
+    source: 'rule_fallback',
+    model: null,
+    promptVersion: 'mock_delivery_compose_v1',
+    selectedCatalogId: id,
+    selectedGiftName: name,
+    letter: {
+      salutation: currentLetter.salutation || '给你：',
+      paragraphs,
+      signature: currentLetter.signature || '—— 我',
+      tone: currentLetter.tone || '自然',
+    },
+    ritual: isActivity
+      ? [
+          { time: answers.timing || '送出前', title: '先确认时间与预约', desc: '核对可预约日期、参与条件和取消规则，再发出邀请。' },
+          { time: '发出邀请时', title: '把选择权留给 TA', desc: `告诉 TA 你想一起体验「${name}」，同时留出改期或婉拒的空间。` },
+        ]
+      : [
+          { time: answers.timing || '送出前', title: '先确认商品细节', desc: '核对规格、库存、到货时间和退换规则，再决定包装方式。' },
+          { time: '送出当天', title: '先让 TA 看你写的话', desc: `递出「${name}」时留一点安静，让对方按自己的节奏拆开和回应。` },
+        ],
+  }
+}
+
 export async function shuffleGifts(planId, { exclude = [], answers } = {}) {
   await delay(800)
   return {

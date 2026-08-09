@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { SERVICE_STATE, assertPlan, normalizeServiceStatus } from '@/api/contracts'
+import {
+  SERVICE_STATE,
+  assertDeliveryComposition,
+  assertPlan,
+  normalizeServiceStatus,
+} from '@/api/contracts'
 
 describe('H5 API contracts', () => {
   it('normalizes service states', () => {
@@ -14,5 +19,10 @@ describe('H5 API contracts', () => {
   it('rejects incomplete plan payloads', () => {
     expect(() => assertPlan({ gifts: [] })).toThrow('信件')
     expect(assertPlan({ gifts: [], letter: {}, ritual: [] })).toEqual({ gifts: [], letter: {}, ritual: [] })
+  })
+
+  it('rejects an incomplete selected-gift delivery payload', () => {
+    expect(() => assertDeliveryComposition({ letter: {} })).toThrow('送出步骤')
+    expect(assertDeliveryComposition({ letter: {}, ritual: [{}] })).toEqual({ letter: {}, ritual: [{}] })
   })
 })

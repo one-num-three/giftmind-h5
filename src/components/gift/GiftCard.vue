@@ -22,10 +22,12 @@ const props = defineProps({
   liked: Boolean,
   locked: Boolean,
   selected: Boolean,
+  selecting: Boolean,
+  selectionBusy: Boolean,
   replacing: Boolean,
 })
 
-const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace', 'select'])
+const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace', 'choose'])
 
 /** 礼物分类 → 标签配色 */
 const CATEGORY_TONE = {
@@ -44,6 +46,9 @@ const g = computed(() => (props.gift && typeof props.gift === 'object' ? props.g
 
 const emoji = computed(() => text(g.value.emoji) || '🎁')
 const name = computed(() => text(g.value.name) || '一件还没起名的礼物')
+const selectionKey = computed(() => (
+  g.value.catalogId || g.value.id || (name.value ? `legacy:${name.value}` : '')
+))
 const category = computed(() => text(g.value.category))
 const categoryTone = computed(() => CATEGORY_TONE[category.value] || 'default')
 const tip = computed(() => text(g.value.tip))
@@ -158,8 +163,7 @@ function onReplace() {
 }
 
 function onSelect() {
-  const id = g.value.catalogId || g.value.id
-  if (id) emit('select', g.value)
+  if (selectionKey.value && !props.selectionBusy) emit('choose', g.value)
 }
 
 /* ── 展开/收起的高度过渡（无定时器） ───────── */
@@ -190,7 +194,7 @@ function leave(el) {
   <GCard
     ref="cardRef"
     class="gift"
-    :class="{ 'is-primary': primary, 'is-selected': selected }"
+    :class="{ 'is-primary': primary, 'is-selected': selected, 'is-selecting': selecting }"
     padding="none"
     radius="xl"
     :tone="primary ? 'rose' : 'surface'"
@@ -286,13 +290,17 @@ function leave(el) {
 
       <button
         class="choose tap"
-        :class="{ 'is-selected': selected }"
+        :class="{ 'is-selected': selected, 'is-loading': selecting }"
         type="button"
+        :data-gift-key="selectionKey"
+        :disabled="selectionBusy"
+        :aria-busy="selecting ? 'true' : 'false'"
         :aria-pressed="selected ? 'true' : 'false'"
         @click="onSelect"
       >
-        <span>{{ selected ? '已选中，查看送出方案' : '选它，继续生成送出方案' }}</span>
-        <GIcon name="arrowRight" :size="17" />
+        <span>{{ selecting ? '正在为它整理送出方案…' : selected ? '已选中，查看送出方案' : '选它，继续生成送出方案' }}</span>
+        <span v-if="selecting" class="choose__pulse" aria-hidden="true"><i /><i /><i /></span>
+        <GIcon v-else name="arrowRight" :size="17" />
       </button>
 
       <!-- ── 底部一行 ── -->
@@ -371,6 +379,9 @@ function leave(el) {
 }
 .gift.is-selected {
   box-shadow: 0 0 0 2px var(--c-sage-deep, var(--c-ink)), var(--sh-2);
+}
+.gift.is-selecting {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--c-rose) 55%, var(--c-line)), var(--sh-2);
 }
 
 .gift__badge {
@@ -696,9 +707,39 @@ function leave(el) {
 .choose.is-selected {
   background: var(--c-sage-deep, var(--c-ink));
 }
+.choose:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+.choose.is-loading {
+  opacity: 1;
+}
+.choose__pulse {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.choose__pulse i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: choose-pulse 0.9s ease-in-out infinite;
+}
+.choose__pulse i:nth-child(2) {
+  animation-delay: 0.12s;
+}
+.choose__pulse i:nth-child(3) {
+  animation-delay: 0.24s;
+}
 .choose:focus-visible {
   outline: 2px solid var(--c-rose);
   outline-offset: 3px;
+}
+
+@keyframes choose-pulse {
+  0%, 70%, 100% { opacity: 0.35; transform: translateY(0); }
+  35% { opacity: 1; transform: translateY(-2px); }
 }
 
 /* ── 正文 ─────────────────────────────────── */
@@ -860,6 +901,10 @@ function leave(el) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .choose__pulse i {
+    animation: none;
+    opacity: 0.75;
+  }
   .like.is-on :deep(svg) {
     animation: none;
   }
