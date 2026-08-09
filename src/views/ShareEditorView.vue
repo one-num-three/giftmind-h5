@@ -29,7 +29,7 @@ const THEMES = ['dawn', 'dusk', 'sage']
 const EMOJI_POOL = ['🎁', '💌', '🌿', '✨', '🕯️', '🍰', '🌙', '🎈']
 
 const TOGGLES = [
-  { key: 'showGifts', label: '展示礼物清单', desc: '让 TA 看到你从四类榜单里挑中的方案' },
+  { key: 'showGifts', label: '展示最终礼物', desc: '让 TA 看到你最后选中的这一件礼物' },
   { key: 'showRitual', label: '展示仪式流程', desc: '告诉 TA 接下来会发生什么' },
   { key: 'showSignature', label: '展示署名', desc: '在信的末尾留下你的落款' },
   { key: 'allowReply', label: '允许 TA 回信', desc: '页面底部会出现一个回话的输入框' },

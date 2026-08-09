@@ -20,6 +20,7 @@ import api from '@/api'
 import { useUiStore } from '@/stores/ui'
 import EnvelopeCover from '@/components/share/EnvelopeCover.vue'
 import RevealSection from '@/components/share/RevealSection.vue'
+import { giftsForShare } from '@/utils/sharePlan'
 
 const route = useRoute()
 const router = useRouter()
@@ -98,9 +99,13 @@ const signature = computed(
 )
 
 const gifts = computed(() => {
-  const list = Array.isArray(plan.value?.gifts) ? plan.value.gifts : []
-  return list.filter((g) => g && typeof g === 'object')
+  return giftsForShare(plan.value)
 })
+const giftLeadText = computed(() => (
+  gifts.value.length === 1
+    ? '这一件，是想了很久才定下来的。'
+    : '这几样是想了很久才定下来的。'
+))
 const ritual = computed(() => {
   const list = Array.isArray(plan.value?.ritual) ? plan.value.ritual : []
   return list.filter((r) => r && typeof r === 'object' && (text(r.title) || text(r.time)))
@@ -265,7 +270,7 @@ onUnmounted(() => {
         <template v-if="showGifts">
           <RevealSection class="blk blk--tight">
             <p class="lead__label">TA 给你准备的</p>
-            <p class="lead__text">这几样是想了很久才定下来的。</p>
+            <p class="lead__text">{{ giftLeadText }}</p>
           </RevealSection>
           <div class="gifts">
             <RevealSection v-for="(g, i) in gifts" :key="g.id || i" :delay="i * 90">
