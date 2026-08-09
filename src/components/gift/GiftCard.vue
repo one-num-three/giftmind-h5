@@ -14,6 +14,7 @@ import {
   rawEvidenceEntries,
   rawScoreEntries,
   recommendationExplanation,
+  recommendationKindLabel,
 } from '@/utils/recommendationExplain'
 
 const props = defineProps({
@@ -31,6 +32,7 @@ const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace', 'choose'])
 
 /** 礼物分类 → 标签配色 */
 const CATEGORY_TONE = {
+  礼物: 'sand',
   实物: 'sand',
   体验: 'sage',
   定制: 'lilac',
@@ -49,7 +51,7 @@ const name = computed(() => text(g.value.name) || '一件还没起名的礼物')
 const selectionKey = computed(() => (
   g.value.catalogId || g.value.id || (name.value ? `legacy:${name.value}` : '')
 ))
-const category = computed(() => text(g.value.category))
+const category = computed(() => recommendationKindLabel(g.value))
 const categoryTone = computed(() => CATEGORY_TONE[category.value] || 'default')
 const tip = computed(() => text(g.value.tip))
 const tags = computed(() =>

@@ -30,6 +30,16 @@ function unique(values, limit = 4) {
   return [...new Set(values.map(text).filter(Boolean))].slice(0, limit)
 }
 
+export function recommendationKindLabel(gift = {}) {
+  const kind = text(gift.kind || gift.giftTypeCode || gift.entityType).toLowerCase()
+  if (['activity', 'experience'].includes(kind)) return '体验'
+  if (['product', 'goods', 'gift', 'gift_idea'].includes(kind)) return '礼物'
+  const category = text(gift.category)
+  if (/活动|体验/.test(category)) return '体验'
+  if (/实物|商品|礼物|数字|定制/.test(category)) return '礼物'
+  return category
+}
+
 export function recommendationExplanation(gift = {}) {
   const directReason = text(gift.whyForRecipient)
     || text(gift.storyConnection)

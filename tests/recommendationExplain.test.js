@@ -3,6 +3,7 @@ import {
   rawEvidenceEntries,
   rawScoreEntries,
   recommendationExplanation,
+  recommendationKindLabel,
 } from '@/utils/recommendationExplain'
 
 describe('recommendation explanation', () => {
@@ -50,5 +51,11 @@ describe('recommendation explanation', () => {
     expect(rawEvidenceEntries({ rag_retrieval: ['照片', '相册'] })).toEqual([
       { key: 'rag_retrieval', label: '语义检索', values: ['照片', '相册'] },
     ])
+  })
+
+  it('uses the user-facing gift versus experience taxonomy', () => {
+    expect(recommendationKindLabel({ kind: 'product', category: '数字' })).toBe('礼物')
+    expect(recommendationKindLabel({ giftTypeCode: 'activity', category: '线下活动' })).toBe('体验')
+    expect(recommendationKindLabel({ category: '实物' })).toBe('礼物')
   })
 })
