@@ -49,12 +49,41 @@ const tags = computed(() =>
     .slice(0, 3),
 )
 
+const DIMENSION_META = [
+  ['recommendation', '推荐度'],
+  ['fit', '适配度'],
+  ['distinctiveness', '特别度'],
+  ['feasibility', '可执行度'],
+]
+
+const awards = computed(() =>
+  toArray(g.value.awards)
+    .map(text)
+    .filter((award) => Boolean(award) && award !== text(g.value.rankingLabel)),
+)
+
+const dimensions = computed(() => {
+  const source = g.value.dimensionScores
+  if (!source || typeof source !== 'object') return []
+  return DIMENSION_META.map(([key, label]) => ({
+    key,
+    label,
+    value: Math.min(100, Math.max(0, Math.round(Number(source[key]) || 0))),
+  }))
+})
+
 const score = computed(() => {
-  const n = Number(g.value.matchScore)
+  const n = Number(
+    g.value.rankingScore
+      ?? g.value.dimensionScores?.[g.value.rankingDimension]
+      ?? g.value.dimensionScores?.recommendation
+      ?? g.value.matchScore,
+  )
   if (!Number.isFinite(n)) return 0
   return Math.min(100, Math.max(0, Math.round(n)))
 })
 const hasScore = computed(() => score.value > 0)
+const scoreCaption = computed(() => text(g.value.rankingLabel) || '推荐度')
 
 const tipOpen = ref(false)
 
@@ -139,12 +168,24 @@ function leave(el) {
             />
           </svg>
           <span class="score__num">{{ score }}</span>
-          <span class="score__cap">契合度</span>
+          <span class="score__cap">{{ scoreCaption }}</span>
         </div>
+      </div>
+
+      <div v-if="awards.length" class="gift__awards" aria-label="推荐榜单标签">
+        <span v-for="award in awards" :key="award">{{ award }}</span>
       </div>
 
       <!-- ── 为什么是它 ── -->
       <p v-if="why" class="gift__why">{{ why }}</p>
+
+      <div v-if="dimensions.length" class="gift__dimensions" aria-label="多维评分">
+        <div v-for="dimension in dimensions" :key="dimension.key" class="gift__dimension">
+          <span>{{ dimension.label }}</span>
+          <strong>{{ dimension.value }}</strong>
+          <i aria-hidden="true"><b :style="{ width: `${dimension.value}%` }"></b></i>
+        </div>
+      </div>
 
       <!-- ── 价格 / 备货 ── -->
       <div v-if="price || leadTime" class="gift__meta">
@@ -346,6 +387,64 @@ function leave(el) {
   font-size: var(--fs-micro);
   color: var(--c-ink-4);
   white-space: nowrap;
+}
+
+.gift__awards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--s-3);
+}
+.gift__awards span {
+  padding: 4px 9px;
+  border-radius: var(--r-pill);
+  background: var(--c-sand-soft);
+  color: var(--c-sand-deep);
+  font-size: var(--fs-micro);
+  font-weight: 650;
+}
+
+.gift__dimensions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--c-paper-2);
+}
+.gift.is-primary .gift__dimensions {
+  background: var(--c-surface);
+}
+.gift__dimension {
+  min-width: 0;
+}
+.gift__dimension > span,
+.gift__dimension > strong {
+  font-size: var(--fs-micro);
+}
+.gift__dimension > span {
+  color: var(--c-ink-3);
+}
+.gift__dimension > strong {
+  float: right;
+  color: var(--c-rose-deep);
+  font-variant-numeric: tabular-nums;
+}
+.gift__dimension i {
+  height: 4px;
+  display: block;
+  clear: both;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: var(--r-pill);
+  background: var(--c-line);
+}
+.gift__dimension b {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--c-rose), var(--c-sand));
 }
 
 /* ── 正文 ─────────────────────────────────── */

@@ -18,7 +18,7 @@ export const H5_ENDPOINTS = Object.freeze({
 export const GENERATION_STAGES = Object.freeze([
   { key: 'read', label: '正在读取你的回答', hint: '把关系、故事和期待整理成线索' },
   { key: 'catalog', label: '正在筛选礼物库', hint: '先排除预算、时间和禁忌不合适的选项' },
-  { key: 'compare', label: '正在比较候选', hint: '只在真实目录候选里寻找更贴近 TA 的组合' },
+  { key: 'compare', label: '正在生成四类榜单', hint: '分别比较推荐度、适配度、特别度和可执行度' },
   { key: 'reason', label: '正在写推荐理由', hint: '把礼物和你们的故事连接起来' },
   { key: 'compose', label: '正在整理信件与仪式', hint: '让心意最后落到可以执行的细节里' },
 ])
@@ -76,6 +76,9 @@ export function normalizeServiceStatus(raw) {
 export function assertPlan(raw) {
   if (!raw || typeof raw !== 'object') throw new Error('服务返回的方案为空')
   if (!Array.isArray(raw.gifts)) throw new Error('服务返回的礼物列表格式不正确')
+  if (raw.recommendationGroups != null && !Array.isArray(raw.recommendationGroups)) {
+    throw new Error('服务返回的推荐榜单格式不正确')
+  }
   if (!raw.letter || typeof raw.letter !== 'object') throw new Error('服务返回的信件格式不正确')
   if (!Array.isArray(raw.ritual)) throw new Error('服务返回的仪式流程格式不正确')
   return raw

@@ -10,7 +10,8 @@
  *
  *  对外接口（mockAdapter.js 依赖，签名不可改）：
  *    generateMockPlan(answers)                  -> Plan（不含 id/createdAt）
- *    pickGifts(answers, { exclude })            -> Gift[3]
+ *    pickGifts(answers, { exclude })            -> Gift[2]
+ *    pickGiftGroups(answers, { exclude })       -> RankingGroup[4]
  *    generateLetter(answers, tone)              -> Letter
  * ══════════════════════════════════════════════════════════════
  */
@@ -330,7 +331,7 @@ function scoreAll(ctx, seed) {
     scored.push({ gift, raw })
   }
   // 极端情况下（禁忌把库清空）退回全库，保证永远有输出
-  if (scored.length < 3) {
+  if (scored.length < 2) {
     const fallbackJitter = seededRandom(`${seed}|fallback`)
     return GIFT_CATALOG.map((gift) => ({ gift, raw: (fallbackJitter() - 0.5) * 6 }))
   }
@@ -350,54 +351,15 @@ function makeScorer(scored) {
   }
 }
 
-/**
- * 选 3 件：
- *  - 首选必须挂钩 memory（命中记忆线索的最高分那件）
- *  - 后两件在高分里挑，同品类 / 同标签 / 同价位会被扣分，保证不雷同
- */
+/** 各取最高分实物和体验，再按综合分排序。 */
 function selectGifts(scored, ctx, exclude) {
   const banned = new Set(list(exclude))
   let pool = scored.filter((s) => !banned.has(s.gift.id)).sort((a, b) => b.raw - a.raw)
-  if (pool.length < 3) pool = [...scored].sort((a, b) => b.raw - a.raw)
+  if (pool.length < 2) pool = [...scored].sort((a, b) => b.raw - a.raw)
 
-  // 首选：优先取命中记忆线索、且分数没落后头名太多的那件
-  let primaryIdx = 0
-  if (ctx.memory.has && ctx.memory.ids.size) {
-    const i = pool.findIndex((s) => ctx.memory.ids.has(s.gift.id))
-    if (i >= 0 && pool[i].raw >= pool[0].raw - 15) primaryIdx = i
-  }
-  const primary = pool[primaryIdx]
-  const chosen = [primary]
-
-  // 后两件不能比首选分更高，否则「首选」名不副实
-  const others = pool.filter((_, i) => i !== primaryIdx)
-  const capped = others.filter((s) => s.raw <= primary.raw)
-  const source = capped.length >= 2 ? capped : others
-  const takeAt = (i) => chosen.push(source.splice(i, 1)[0])
-
-  // 余下两件：多样性惩罚后再取最高
-  while (chosen.length < 3 && source.length) {
-    const usedCat = new Set(chosen.map((c) => c.gift.category))
-    const usedTags = new Set(chosen.flatMap((c) => c.gift.tags))
-    let bestIdx = 0
-    let bestVal = -Infinity
-    source.forEach((s, i) => {
-      let v = s.raw
-      if (usedCat.has(s.gift.category)) v -= 16
-      v -= s.gift.tags.filter((t) => usedTags.has(t)).length * 5
-      if (chosen.some((c) => Math.abs(c.gift.priceLow - s.gift.priceLow) < 60)) v -= 4
-      if (v > bestVal) {
-        bestVal = v
-        bestIdx = i
-      }
-    })
-    takeAt(bestIdx)
-  }
-
-  // 首选钉在第一位，两个备选按契合度排，避免出现 94 / 87 / 90 这种跳序
-  const [first, ...alts] = chosen
-  alts.sort((a, b) => b.raw - a.raw)
-  return [first, ...alts]
+  const product = pool.find((entry) => entry.gift.kind === 'product')
+  const activity = pool.find((entry) => entry.gift.kind === 'activity')
+  return [product, activity].filter(Boolean).sort((a, b) => b.raw - a.raw)
 }
 
 function leadTimeText(gift, days) {
@@ -425,6 +387,12 @@ function decorateGift(entry, ctx, index, toScore, rand) {
   const g = entry.gift
   const why = index === 0 && ctx.memory.has && ctx.memory.frag ? weaveMemory(g.why, ctx.memory.frag, rand) : g.why
 
+  const recommendation = toScore(entry.raw)
+  const inBudget = g.priceLow >= ctx.budgetLow && g.priceHigh <= ctx.budgetHigh
+  const feasibility = clamp((g.leadDays <= ctx.days ? 52 : 25) + (inBudget ? 43 : 18), 0, 98)
+  const distinctiveness = clamp(58 + Math.min(24, (g.tags || []).length * 4) + (g.kind === 'activity' ? 6 : 0), 0, 98)
+  const fit = clamp(Math.round(recommendation * 0.96 + (ctx.memory.ids.has(g.id) ? 4 : 0)), 0, 98)
+
   return {
     id: g.id,
     catalogId: g.id,
@@ -434,7 +402,14 @@ function decorateGift(entry, ctx, index, toScore, rand) {
     price: `¥${g.priceLow}–${g.priceHigh}`,
     category: g.category,
     tags: (g.tags || []).slice(0, 3),
-    matchScore: toScore(entry.raw),
+    matchScore: recommendation,
+    dimensionScores: {
+      recommendation,
+      fit,
+      distinctiveness,
+      feasibility,
+    },
+    awards: [],
     tip: g.tip,
     leadTime: leadTimeText(g, ctx.days),
     // 推荐结果保留目录元数据，后续接真实报价 / 图片 / 变体时无需改方案协议。
@@ -463,7 +438,65 @@ export function pickGifts(answers, { exclude = [] } = {}) {
   const chosen = selectGifts(scored, ctx, excluded)
   const rand = seededRandom(`${seed}|why`)
 
-  return chosen.map((entry, i) => decorateGift(entry, ctx, i, toScore, rand))
+  const gifts = chosen.map((entry, i) => decorateGift(entry, ctx, i, toScore, rand))
+  const awardSpecs = [
+    ['recommendation', '最推荐'],
+    ['fit', '最合适'],
+    ['distinctiveness', '最特别'],
+    ['feasibility', '最省心'],
+  ]
+  if (gifts.length === 2) {
+    awardSpecs.forEach(([key, label]) => {
+      const winner = gifts.reduce((best, gift) =>
+        gift.dimensionScores[key] > best.dimensionScores[key] ? gift : best,
+      )
+      winner.awards.push(label)
+    })
+  }
+  return gifts
+}
+
+const RANKING_GROUP_SPECS = [
+  ['recommendation', '最推荐', '综合考虑适配、特别程度和落地难度，优先看整体最稳的三个方案。'],
+  ['fit', '最合适', '更贴合送礼对象、场合、期待感受和你提供的具体故事。'],
+  ['distinctiveness', '最特别', '更少见、更有记忆点，也更不容易变成一份普通礼物。'],
+  ['feasibility', '最省心', '预算、准备时间与获得方式更稳妥，执行时更不容易出岔子。'],
+]
+
+export function pickGiftGroups(answers, { exclude = [] } = {}) {
+  const ctx = buildContext(answers)
+  const excluded = list(exclude)
+  const seed = seedOf(answers, excluded.length ? `groups:${excluded.join(',')}` : 'groups')
+  const scored = scoreAll(ctx, seed)
+  const toScore = makeScorer(scored)
+  const banned = new Set(excluded)
+  let pool = scored.filter((entry) => !banned.has(entry.gift.id))
+  if (pool.length < 3) pool = scored
+  const rand = seededRandom(`${seed}|why`)
+  const decorated = pool
+    .sort((a, b) => b.raw - a.raw)
+    .map((entry, index) => decorateGift(entry, ctx, index, toScore, rand))
+
+  return RANKING_GROUP_SPECS.map(([key, title, description]) => ({
+    key,
+    title,
+    description,
+    candidates: [...decorated]
+      .sort((a, b) => (
+        b.dimensionScores[key] - a.dimensionScores[key]
+        || b.dimensionScores.recommendation - a.dimensionScores.recommendation
+        || a.id.localeCompare(b.id)
+      ))
+      .slice(0, 3)
+      .map((gift, index) => ({
+        ...gift,
+        awards: [title],
+        rankingDimension: key,
+        rankingLabel: title,
+        rankingRank: index + 1,
+        rankingScore: gift.dimensionScores[key],
+      })),
+  }))
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -668,6 +701,7 @@ export function generateMockPlan(answers) {
   const rand = seededRandom(`${seed}|plan`)
 
   const gifts = pickGifts(answers)
+  const recommendationGroups = pickGiftGroups(answers)
   const insight = buildInsight(ctx, rand)
   const ritual = buildRitual(ctx, rand)
   const share = buildShare(ctx, rand)
@@ -678,10 +712,11 @@ export function generateMockPlan(answers) {
     subtitle,
     insight,
     gifts,
+    recommendationGroups,
     letter: generateLetter(answers),
     ritual,
     share,
   }
 }
 
-export default { generateMockPlan, pickGifts, generateLetter }
+export default { generateMockPlan, pickGifts, pickGiftGroups, generateLetter }

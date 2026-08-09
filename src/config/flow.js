@@ -50,6 +50,23 @@ export const CHAT_FLOW = [
     placeholder: '也可以直接告诉我 TA 是谁…',
   },
   {
+    id: 'recipient_age',
+    stage: 'discover',
+    key: 'recipientAge',
+    type: 'single',
+    messages: [
+      '再确认一下 TA 的年龄段。涉及酒类、KTV、网吧等内容时，我会据此主动避开不合适的推荐。',
+    ],
+    options: [
+      { value: '未满18岁', label: '未满 18 岁', emoji: '🧒' },
+      { value: '18–25岁', label: '18–25 岁' },
+      { value: '26–40岁', label: '26–40 岁' },
+      { value: '41–60岁', label: '41–60 岁' },
+      { value: '60岁以上', label: '60 岁以上' },
+      { value: '不确定', label: '不确定', emoji: '❔' },
+    ],
+  },
+  {
     id: 'occasion',
     stage: 'discover',
     key: 'occasion',
@@ -182,19 +199,33 @@ export const CHAT_FLOW = [
 
   /* ── 阶段四：定型方案 ────────────────────────── */
   {
-    id: 'style',
+    id: 'all_participants_adults',
     stage: 'shape',
-    key: 'style',
-    type: 'multi',
-    minSelect: 1,
-    maxSelect: 3,
-    messages: ['最后一个问题：礼物的形式你有偏好吗？'],
+    key: 'allParticipantsAdults',
+    type: 'single',
+    messages: [
+      '我会同时考虑实物和体验方案。参与体验的所有人是否都已满 18 岁？',
+      '我不会根据关系或活动类型猜测年龄。',
+    ],
     options: [
-      { value: '实物礼物', label: '实物礼物', emoji: '🎁' },
-      { value: '体验类（活动/课程/旅行）', label: '体验类', emoji: '🎟️' },
-      { value: '定制 / 手工', label: '定制 / 手工', emoji: '🪡' },
-      { value: '数字内容（视频/画/歌）', label: '数字内容', emoji: '🎬' },
-      { value: '组合方案，有什么送什么', label: '组合方案', emoji: '🧺' },
+      { value: true, label: '是，全部成年', emoji: '✅' },
+      { value: false, label: '否 / 不确定', emoji: '🛡️' },
+    ],
+    summary: (value) => (value ? '是，参与者全部成年' : '否 / 还不确定'),
+  },
+  {
+    id: 'city_tier_code',
+    stage: 'shape',
+    key: 'cityTierCode',
+    type: 'single',
+    messages: [
+      '活动会在哪一类城市进行？',
+      '我会据此过滤当地通常难以找到的体验，具体门店和档期仍需要下单前确认。',
+    ],
+    options: [
+      { value: 'tier_1', label: '一线城市', hint: '北京 / 上海 / 广州 / 深圳', emoji: '🏙️' },
+      { value: 'tier_2', label: '二线城市', hint: '省会、新一线与强二线城市', emoji: '🌆' },
+      { value: 'tier_3_or_below', label: '三线及以下', hint: '其他地级市、县城与城镇', emoji: '🏘️' },
     ],
   },
 ]

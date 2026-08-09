@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GiftMind 活动城市层级核对表</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+        color: #173f35;
+        background: #f5f1e8;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; }
+      header {
+        padding: 56px max(24px, calc((100vw - 1180px) / 2));
+        color: #fffdf6;
+        background: #174d3c;
+      }
+      .eyebrow { margin: 0 0 12px; color: #f0c65f; font-size: 13px; font-weight: 800; letter-spacing: .16em; }
+      h1 { margin: 0; font-size: clamp(34px, 5vw, 62px); line-height: 1.08; }
+      .lead { max-width: 760px; margin: 18px 0 0; color: #dfece6; font-size: 17px; line-height: 1.8; }
+      main { width: min(1180px, calc(100% - 32px)); margin: -22px auto 72px; }
+      .toolbar {
+        position: sticky; top: 12px; z-index: 10;
+        display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;
+        padding: 18px; border: 1px solid #e1d6c2; border-radius: 22px;
+        background: rgba(255, 253, 247, .94); box-shadow: 0 14px 40px rgba(31, 60, 49, .12);
+        backdrop-filter: blur(12px);
+      }
+      input {
+        width: 100%; min-height: 48px; padding: 0 16px;
+        border: 1px solid #d7c9ae; border-radius: 14px; outline: none;
+        color: #173f35; background: #fff; font: inherit;
+      }
+      input:focus { border-color: #28705a; box-shadow: 0 0 0 3px rgba(40, 112, 90, .12); }
+      .total { white-space: nowrap; color: #62736b; }
+      .total strong { color: #174d3c; font-size: 24px; }
+      .notice {
+        margin: 22px 0; padding: 18px 20px; border-radius: 18px;
+        color: #69562b; background: #fff1c9; line-height: 1.7;
+      }
+      .groups { display: grid; gap: 22px; }
+      section {
+        overflow: hidden; border: 1px solid #e0d5c1; border-radius: 24px;
+        background: #fffdf7; box-shadow: 0 12px 35px rgba(55, 65, 55, .07);
+      }
+      .group-head {
+        display: flex; justify-content: space-between; gap: 20px; align-items: flex-start;
+        padding: 24px 26px; border-bottom: 1px solid #eee5d5;
+      }
+      .group-head h2 { margin: 0 0 8px; font-size: 23px; }
+      .group-head p { margin: 0; color: #718078; line-height: 1.6; }
+      .count {
+        min-width: 56px; padding: 10px 12px; border-radius: 14px;
+        color: #fff; background: #1d6049; text-align: center; font-size: 22px; font-weight: 800;
+      }
+      ul {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px; margin: 0; padding: 20px 24px 26px; list-style: none;
+      }
+      li {
+        min-height: 76px; padding: 14px; border: 1px solid #ece3d4; border-radius: 15px;
+        background: #fff; line-height: 1.5;
+      }
+      .name { display: block; min-height: 42px; font-weight: 700; }
+      .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+      .chip { padding: 3px 7px; border-radius: 999px; color: #4d6258; background: #edf3ef; font-size: 11px; }
+      .empty { padding: 34px; color: #7b867f; text-align: center; }
+      footer { padding: 10px 24px 40px; color: #79847f; text-align: center; }
+      @media (max-width: 820px) {
+        ul { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 560px) {
+        header { padding-top: 38px; padding-bottom: 48px; }
+        main { width: min(100% - 20px, 1180px); }
+        .toolbar { grid-template-columns: 1fr; }
+        .total { text-align: right; }
+        .group-head { padding: 20px; }
+        ul { grid-template-columns: 1fr; padding: 14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <p class="eyebrow">GIFTMIND · DATA AUDIT</p>
+      <h1>活动城市层级核对表</h1>
+      <p class="lead">这里展示当前 RAG 数据库里的 118 个活动。标签表示这种活动通常在哪些城市层级有供给，不代表某家具体商户已经确认可用。</p>
+    </header>
+    <main>
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="搜索活动，例如：陶艺、露营、KTV……" aria-label="搜索活动" />
+        <div class="total">当前显示 <strong id="visible-count">118</strong> / 118</div>
+      </div>
+      <div class="notice"><strong>怎么看：</strong>活动可以覆盖多个层级。例如“陶艺体验”在不同城市都可能存在，所以会同时标记三个层级；“室内冲浪”目前按稀缺场馆处理，只标记一线城市。</div>
+      <div id="groups" class="groups"></div>
+    </main>
+    <footer>数据来源：giftmind-data-studio/rag/data_cleaned.json · 生成于 2026-08-08</footer>
+    <script>
+      const groups = [
+        {
+          title: '仅一线城市',
+          description: '需要稀缺、重资产或目前主要集中在一线城市的场馆。',
+          tiers: ['一线城市'],
+          items: ['室内冲浪体验', '室内滑雪双人体验'],
+        },
+        {
+          title: '一线 + 二线城市',
+          description: '在一线和二线城市通常能找到供给，三线及以下需要先确认具体商户。',
+          tiers: ['一线城市', '二线城市'],
+          items: [
+            '香氛/香水调制工坊', '双人调酒课', '双人咖啡拉花课', '双人卡丁车竞速', '双人保龄球夜场',
+            '双人射箭馆', '双人蹦床公园', '双人网球私教课', '双人壁球体验', '双人滑冰场之夜',
+            '主机游戏双人包间', '双人密室逃脱', '双人即兴喜剧工作坊', '摇摆舞双人体验课', '双人木工体验',
+            '双人银饰手作', '双人香薰蜡烛工坊', '爵士小酒馆之夜', 'Citywalk 主题线路加探店', '美术馆特展导览加下午茶',
+            '游船赏夜景', '观光巴士环城', '马戏/杂技/魔术秀', '民乐/合唱演出观演', '真人 CS 激光对战',
+            '剧本杀推理局', '桌游店半日', '主机游戏对战夜', '卡丁车竞速局', '蹦床躲避球局',
+            '沉浸式剧场/RPG 剧场', '脱口秀开放麦拼盘', '精酿啤酒品鉴局', '咖啡杯测/手冲局', '手绘帆布鞋/滑板 DIY',
+            '城市荧光夜跑', '滑板/陆冲体验', '水上乐园/游泳日', '拳击/搏击体验课', '街舞体验课',
+            '银婚/金婚纪念写真', '茶楼听书/评弹', '老年大学兴趣班', '城市观光巴士环城', '智能手机摄影课',
+          ],
+        },
+        {
+          title: '一线 + 二线 + 三线及以下',
+          description: '供给相对普遍，通常可以在各层级城市寻找对应版本。',
+          tiers: ['一线城市', '二线城市', '三线及以下'],
+          items: [
+            '星空露营夜——和 TA 一起看银河', '双人油画写生课', '中式点心手作（青团/月饼/汤圆）', '双人羽毛球陪练局', '电玩城双人畅玩',
+            '双人植物染/扎染', '双人茶道体验', '相声茶馆双人位', '陪爸妈全面体检加营养早餐', '药浴/汗蒸养生馆',
+            '中医推拿加艾灸体验', '肩颈理疗加足疗半日', '陪爸妈晨练加豆浆油条早餐', '博物馆特展加讲解', '陪爸妈逛动物园',
+            '植物园赏花半日', '怀旧影院老电影专场', '地方戏曲/京剧观演', '寺庙祈福加素斋', '庙会/灯会一日',
+            '采茶制茶半日', '应季水果采摘', '家庭私厨家乡菜课', '缓坡登山看日出', '古镇两日游',
+            '电动绿道骑行', '陪爸妈钓鱼半日', '茶室棋牌下午', '家庭 KTV 午后场', '家庭短视频导演日',
+            '老照片整理日', '阳台菜园体验课', '传统点心烘焙班', '旧书店/图书馆淘书日', '家庭健步走/社区运动会',
+            '老字号早茶/点心巡礼', '家庭烧烤/野餐日', '烟花/灯光秀之夜', '电玩城街机怀旧局', '台球/斯诺克切磋',
+            '匹克球/网球体验', '羽毛球双打局', '篮球/足球半场包场', '营地烧烤日', '城市夜骑',
+            '徒步登山线', '漂流/溯溪半日', 'KTV 午后场', '火锅/自助狂欢', '电竞网吧五黑',
+            '摄影扫街半日', '温泉疗养两日', '公园合唱/广场舞交流', '双人书法挥毫', '经典老电影专场',
+            '博物馆老物件/特展', '花鸟市场半日', '盆栽/园艺课', '象棋/围棋茶室对弈', '钓鱼俱乐部半日',
+            '老友农家乐聚餐', '红色纪念馆/旧址游', '江畔/湖畔漫步合影', '健康讲座加义诊', '艾灸推拿养生馆',
+            '足疗按摩半日', '微信/短视频小课堂', '编织/手工兴趣组', '元宵庙会/灯会', '老字号怀旧宴',
+            '交谊舞体验课',
+          ],
+        },
+      ]
+
+      const container = document.querySelector('#groups')
+      const count = document.querySelector('#visible-count')
+      const search = document.querySelector('#search')
+
+      function render(query = '') {
+        const keyword = query.trim().toLowerCase()
+        let visible = 0
+        container.innerHTML = groups.map((group) => {
+          const items = group.items.filter((name) => name.toLowerCase().includes(keyword))
+          visible += items.length
+          if (!items.length) return ''
+          return `<section>
+            <div class="group-head">
+              <div><h2>${group.title}</h2><p>${group.description}</p></div>
+              <span class="count">${items.length}</span>
+            </div>
+            <ul>${items.map((name) => `<li><span class="name">${name}</span><span class="chips">${group.tiers.map((tier) => `<span class="chip">${tier}</span>`).join('')}</span></li>`).join('')}</ul>
+          </section>`
+        }).join('') || '<div class="empty">没有找到匹配的活动，请换一个关键词。</div>'
+        count.textContent = visible
+      }
+
+      search.addEventListener('input', (event) => render(event.target.value))
+      render()
+    </script>
+  </body>
+</html>

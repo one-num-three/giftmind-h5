@@ -35,8 +35,8 @@ export const PLAN_SCHEMA = {
     },
     gifts: {
       type: 'array',
-      minItems: 3,
-      maxItems: 5,
+      minItems: 2,
+      maxItems: 2,
       items: {
         type: 'object',
         required: ['name', 'why', 'price', 'category'],
@@ -51,8 +51,29 @@ export const PLAN_SCHEMA = {
           format: { type: 'string', description: '目录中的机器分类，如 physical_product / activity' },
           tags: { type: 'array', items: { type: 'string' } },
           matchScore: { type: 'number', description: '0-100 契合度' },
+          dimensionScores: {
+            type: 'object',
+            description: '综合推荐度、适配度、特别度、可执行度',
+          },
+          awards: { type: 'array', items: { type: 'string' } },
           tip: { type: 'string', description: '购买 / 制作的实操建议' },
           leadTime: { type: 'string', description: '需要提前多久准备' },
+        },
+      },
+    },
+    recommendationGroups: {
+      type: 'array',
+      minItems: 4,
+      maxItems: 4,
+      description: '服务端基于目录评分生成的四类榜单，每榜三个候选；模型不得虚构。',
+      items: {
+        type: 'object',
+        required: ['key', 'title', 'candidates'],
+        properties: {
+          key: { type: 'string', enum: ['recommendation', 'fit', 'distinctiveness', 'feasibility'] },
+          title: { type: 'string', enum: ['最推荐', '最合适', '最特别', '最省心'] },
+          description: { type: 'string' },
+          candidates: { type: 'array', minItems: 3, maxItems: 3 },
         },
       },
     },
@@ -103,7 +124,8 @@ export function buildPlanPrompt(answers = {}) {
     `他们之间的故事 / TA 最近想要的：${answers.memory || '用户没有提供，请用更普适但仍然真诚的角度'}`,
     answers.relationshipNote ? `关系状态：${answers.relationshipNote}` : '',
     `希望对方收到时的感受：${answers.feeling || '被理解'}`,
-    `礼物形式偏好：${toText(answers.style)}`,
+    `活动城市层级：${({ tier_1: '一线城市', tier_2: '二线城市', tier_3_or_below: '三线及以下' })[answers.cityTierCode] || '未说明'}`,
+    '礼物形式策略：同时考虑实物礼物与体验礼物',
   ].filter(Boolean)
 
   return `请为下面这次送礼生成一份完整方案。
@@ -111,7 +133,9 @@ export function buildPlanPrompt(answers = {}) {
 ${lines.join('\n')}
 
 要求：
-- 推荐 3 件礼物，第一件是首选，必须最紧扣"他们之间的故事"。
+- gifts 保留 1 件主实物和 1 项主体验，供信件与仪式策划引用。
+- recommendationGroups 由服务端目录评分生成：最推荐、最合适、最特别、最省心各 3 个。
+- 每个榜单严格按对应维度从高到低排列，每个候选都保留四项完整评分。
 - 写一封可以直接抄下来的信，不要出现"AI"字样。
 - 给一套送礼当天的仪式感步骤，可执行、不尴尬。
 - 严格按下面的 JSON Schema 输出：

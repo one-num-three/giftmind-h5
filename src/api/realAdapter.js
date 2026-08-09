@@ -29,6 +29,22 @@ function giftId(gift) {
   return gift?.catalogId || gift?.id || ''
 }
 
+function allPlanGifts(plan) {
+  const direct = Array.isArray(plan?.gifts) ? plan.gifts : []
+  const ranked = Array.isArray(plan?.recommendationGroups)
+    ? plan.recommendationGroups.flatMap((group) => (
+        Array.isArray(group?.candidates) ? group.candidates : []
+      ))
+    : []
+  const seen = new Set()
+  return [...direct, ...ranked].filter((gift) => {
+    const id = giftId(gift)
+    if (!id || seen.has(id)) return false
+    seen.add(id)
+    return true
+  })
+}
+
 function listAnswer(value) {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
   const text = String(value || '').trim()
@@ -46,6 +62,12 @@ export function normalizePlanningAnswers(answers) {
     personality: listAnswer(source.personality),
     taboo: listAnswer(source.taboo),
     style: listAnswer(source.style),
+    allParticipantsAdults:
+      source.allParticipantsAdults === true || source.allParticipantsAdults === 'true'
+        ? true
+        : source.allParticipantsAdults === false || source.allParticipantsAdults === 'false'
+          ? false
+          : null,
   }
 }
 
@@ -91,7 +113,7 @@ export async function chatOnce({ messages, answers, plan }, { signal } = {}) {
 }
 
 export async function replaceGift(plan, { targetId, reason, reasonNote = '', lockedIds = [] } = {}) {
-  const gifts = Array.isArray(plan?.gifts) ? plan.gifts : []
+  const gifts = allPlanGifts(plan)
   return http.post(
     H5_ENDPOINTS.replaceGift,
     {
@@ -188,7 +210,9 @@ export async function transcribeVoice(blob, format) {
 
 function cloneSharePlan(plan) {
   if (!plan || typeof plan !== 'object') throw new Error('方案不存在，无法生成分享')
-  return JSON.parse(JSON.stringify(plan))
+  const copy = JSON.parse(JSON.stringify(plan))
+  delete copy.debug
+  return copy
 }
 
 function shareUrl(shareId) {

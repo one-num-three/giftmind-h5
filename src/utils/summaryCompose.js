@@ -20,6 +20,8 @@ export function composeSummaryBlocks(answers = {}) {
 
   let who = `送给${recipient}，为${occasion}`
   if (timing) who += `，计划${timing}内送出`
+  const age = text(answers.recipientAge)
+  if (age) who += `，年龄段：${age}`
 
   const story =
     text(answers.memory) ||
@@ -35,20 +37,27 @@ export function composeSummaryBlocks(answers = {}) {
   if (taboo) parts.push(`避开：${taboo}`)
   const style = listText(answers.style)
   if (style) parts.push(`形式偏好：${style}`)
-  const city = text(answers.city)
-  if (city) parts.push(`所在城市：${city}`)
+  const cityTierLabels = {
+    tier_1: '一线城市',
+    tier_2: '二线城市',
+    tier_3_or_below: '三线及以下',
+  }
+  const cityTier = cityTierLabels[answers.cityTierCode] || text(answers.city)
+  if (cityTier) parts.push(`活动城市层级：${cityTier}`)
+  if (answers.allParticipantsAdults === true) parts.push('活动参与者：全部成年')
+  if (answers.allParticipantsAdults === false) parts.push('活动参与者：未全部确认成年')
   const notes = text(answers.summaryNotes)
   if (notes) parts.push(`补充说明：${notes}`)
   const constraints = parts.length ? parts.join('；') : '暂无特殊约束'
 
   return {
-    who: { label: 'TA 是谁', text: who, fields: ['recipient'] },
+    who: { label: 'TA 是谁', text: who, fields: ['recipient', 'recipientAge'] },
     story: { label: '你们的故事', text: story, fields: ['memory'] },
     feeling: { label: '这次想表达什么', text: feeling, fields: ['feeling'] },
     constraints: {
       label: '预算与约束',
       text: constraints,
-      fields: ['budget', 'timing', 'taboo', 'style', 'city', 'summaryNotes'],
+      fields: ['budget', 'timing', 'taboo', 'style', 'allParticipantsAdults', 'cityTierCode', 'summaryNotes'],
     },
   }
 }

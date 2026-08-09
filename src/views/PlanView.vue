@@ -2,10 +2,10 @@
 /**
  * PlanView —— 方案结果页（交付核心）
  *
- * 自上而下：封面 → AI 洞察 → 三件礼物 → 一封信 → 仪式流程 → 底部操作条。
+ * 自上而下：封面 → AI 洞察 → 四类推荐榜单 → 一封信 → 仪式流程 → 底部操作条。
  * 路由 /plan/:id?：带 id 从 historyStore 取，不带 id 用 planStore.current，两者都没有就回首页。
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan'
 import { useHistoryStore } from '@/stores/history'
@@ -54,6 +54,45 @@ const hasInsight = computed(() => {
   return Boolean(text(i.summary) || text(i.keyPoint) || traits.length)
 })
 const gifts = computed(() => (Array.isArray(plan.value?.gifts) ? plan.value.gifts : []))
+const comparisonGifts = computed(() => {
+  const source = gifts.value.map((gift) => ({ ...gift, awards: [] }))
+  if (source.length !== 2 || source.some((gift) => !gift.dimensionScores)) {
+    return gifts.value
+  }
+  const awardSpecs = [
+    ['recommendation', '最推荐'],
+    ['fit', '最合适'],
+    ['distinctiveness', '最特别'],
+    ['feasibility', '最省心'],
+  ]
+  awardSpecs.forEach(([key, label]) => {
+    const winner = source.reduce((best, gift) => {
+      const score = Number(gift.dimensionScores?.[key]) || 0
+      const bestScore = Number(best.dimensionScores?.[key]) || 0
+      return score > bestScore ? gift : best
+    })
+    winner.awards.push(label)
+  })
+  return source
+})
+const rankingGroups = computed(() => (
+  Array.isArray(plan.value?.recommendationGroups)
+    ? plan.value.recommendationGroups.filter((group) => Array.isArray(group?.candidates) && group.candidates.length)
+    : []
+))
+const activeRankingKey = ref('recommendation')
+const activeRankingGroup = computed(() => (
+  rankingGroups.value.find((group) => group.key === activeRankingKey.value)
+  || rankingGroups.value[0]
+  || null
+))
+const displayedGifts = computed(() => activeRankingGroup.value?.candidates || comparisonGifts.value)
+
+watch(rankingGroups, (groups) => {
+  if (!groups.some((group) => group.key === activeRankingKey.value)) {
+    activeRankingKey.value = groups[0]?.key || 'recommendation'
+  }
+})
 const letter = computed(() => plan.value?.letter || null)
 const ritual = computed(() => (Array.isArray(plan.value?.ritual) ? plan.value.ritual : []))
 
@@ -91,7 +130,7 @@ async function onShuffle() {
   shuffling.value = true
   try {
     await planStore.shuffleGifts()
-    ui.success('换了三件新的')
+    ui.success('推荐榜单已更新')
   } catch {
     ui.error('没能换出新的，稍后再试')
   } finally {
@@ -348,7 +387,7 @@ onUnmounted(() => {
         <!-- 礼物 -->
         <section class="sec anim-up d-2">
           <div class="sec__head">
-            <p class="section-label">礼物推荐</p>
+            <p class="section-label">礼物推荐 · 每榜 3 个</p>
             <button
               v-if="api.isMock"
               class="linkbtn tap"
@@ -361,9 +400,28 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <div v-if="gifts.length" class="gifts" :class="{ 'is-busy': shuffling }">
+          <div v-if="rankingGroups.length" class="ranking-switch" role="tablist" aria-label="选择推荐榜单">
+            <button
+              v-for="group in rankingGroups"
+              :key="group.key"
+              type="button"
+              role="tab"
+              :aria-selected="activeRankingGroup?.key === group.key"
+              :class="{ 'is-active': activeRankingGroup?.key === group.key }"
+              @click="activeRankingKey = group.key"
+            >
+              {{ group.title }}
+              <small>{{ group.candidates.length }}</small>
+            </button>
+          </div>
+
+          <p v-if="activeRankingGroup?.description" class="ranking-description">
+            {{ activeRankingGroup.description }}
+          </p>
+
+          <div v-if="displayedGifts.length" class="gifts" :class="{ 'is-busy': shuffling }">
             <GiftCard
-              v-for="(g, i) in gifts"
+              v-for="(g, i) in displayedGifts"
               :key="giftKey(g) || `gift-${i}`"
               :gift="g"
               :primary="i === 0"
@@ -761,6 +819,55 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: var(--s-3);
+}
+
+.ranking-switch {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 var(--s-3);
+  padding: 5px;
+  background: var(--c-paper-2);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+}
+
+.ranking-switch button {
+  min-width: 0;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 4px;
+  color: var(--c-ink-3);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-md);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+}
+
+.ranking-switch button.is-active {
+  color: var(--c-paper);
+  background: var(--c-ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.ranking-switch small {
+  min-width: 17px;
+  padding: 1px 4px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  border-radius: 99px;
+  font-size: 9px;
+}
+
+.ranking-description {
+  margin: 0 2px var(--s-4);
+  color: var(--c-ink-3);
+  font-size: var(--fs-caption);
+  line-height: 1.65;
 }
 
 .source-note {

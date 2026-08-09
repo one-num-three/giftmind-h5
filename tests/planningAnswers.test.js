@@ -27,10 +27,11 @@ describe('planning answer contract', () => {
   })
 
   it('normalizes legacy string values before calling the real API', async () => {
-    expect(normalizePlanningAnswers({ personality: '文艺', taboo: '', style: null })).toMatchObject({
+    expect(normalizePlanningAnswers({ personality: '文艺', taboo: '', style: null, allParticipantsAdults: 'false' })).toMatchObject({
       personality: ['文艺'],
       taboo: [],
       style: [],
+      allParticipantsAdults: false,
     })
 
     await generatePlan({ personality: ['文艺'], taboo: '', style: '实物礼物' })

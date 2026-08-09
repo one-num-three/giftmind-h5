@@ -183,7 +183,7 @@ export function useChatFlow() {
     const old = prev ? session.answers[prev.key] : undefined
     session.back()
     if (Array.isArray(old)) return [...old]
-    return old ? [String(old)] : []
+    return old !== undefined && old !== null && old !== '' ? [old] : []
   }
 
   /* ── 进场 ─────────────────────────────────────── */

@@ -2,7 +2,7 @@
  * Mock 适配器 —— 纯前端跑通全流程，方便设计走查与投资人演示。
  * 生成逻辑在 /mock/planGenerator.js，数据在 /mock/giftLibrary.js。
  */
-import { generateMockPlan, generateLetter, pickGifts } from '../../mock/planGenerator'
+import { generateMockPlan, generateLetter, pickGiftGroups, pickGifts } from '../../mock/planGenerator'
 import { GENERATING_STEPS } from '../../mock/generatingSteps'
 import { composeSummaryBlocks } from '@/utils/summaryCompose'
 import {
@@ -81,7 +81,10 @@ export async function rewriteRitual(plan, { instruction = '' } = {}) {
 
 export async function shuffleGifts(planId, { exclude = [], answers } = {}) {
   await delay(800)
-  return pickGifts(answers || {}, { exclude })
+  return {
+    gifts: pickGifts(answers || {}, { exclude }),
+    recommendationGroups: pickGiftGroups(answers || {}, { exclude }),
+  }
 }
 
 export async function createShare(planId, config = {}) {

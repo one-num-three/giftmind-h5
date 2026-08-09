@@ -5,11 +5,13 @@ describe('summary compose', () => {
   it('derives the four editable blocks from answers', () => {
     const summary = composeSummaryBlocks({
       recipient: '女朋友 / 妻子',
+      recipientAge: '26–40岁',
       occasion: '纪念日',
       timing: '一周内',
       budget: '¥300–600',
       taboo: ['不要花 / 香水等易踩雷'],
       style: ['体验类（活动/课程/旅行）'],
+      allParticipantsAdults: true,
       memory: '我们第一次在冰岛看极光。',
       feeling: '被深深理解，感动到想哭',
     })
@@ -21,8 +23,9 @@ describe('summary compose', () => {
     expect(summary.feeling.text).toContain('被深深理解')
     expect(summary.constraints.text).toContain('¥300–600')
     expect(summary.constraints.text).toContain('不要花')
+    expect(summary.constraints.text).toContain('全部成年')
     expect(summary.story.fields).toEqual(['memory'])
-    expect(summary.who.fields).toEqual(['recipient'])
+    expect(summary.who.fields).toEqual(['recipient', 'recipientAge'])
   })
 
   it('falls back gracefully for sparse answers', () => {

@@ -124,7 +124,26 @@ export const usePlanStore = defineStore('plan', {
         const gift = result?.gift || result?.replacement || result
         if (!gift || typeof gift !== 'object') throw new Error('服务没有返回替代礼物')
         const gifts = this.gifts.map((item) => (giftId(item) === targetId ? clone(gift) : clone(item)))
-        this.replaceCurrent({ gifts })
+        const recommendationGroups = Array.isArray(this.current.recommendationGroups)
+          ? this.current.recommendationGroups.map((group) => ({
+              ...clone(group),
+              candidates: Array.isArray(group?.candidates)
+                ? group.candidates.map((item) => {
+                    if (giftId(item) !== targetId) return clone(item)
+                    const dimension = group.key || item.rankingDimension || 'recommendation'
+                    return {
+                      ...clone(gift),
+                      rankingDimension: dimension,
+                      rankingLabel: group.title || item.rankingLabel,
+                      rankingRank: item.rankingRank || item.rank,
+                      rankingScore: gift.dimensionScores?.[dimension] ?? gift.matchScore,
+                      awards: [group.title || item.rankingLabel].filter(Boolean),
+                    }
+                  })
+                : [],
+            }))
+          : undefined
+        this.replaceCurrent({ gifts, ...(recommendationGroups ? { recommendationGroups } : {}) })
         return gift
       } finally {
         this.editing = false
@@ -134,12 +153,13 @@ export const usePlanStore = defineStore('plan', {
     async shuffleGifts() {
       if (!this.current) return
       const exclude = this.current.gifts.map(giftId).filter(Boolean)
-      const gifts = await api.shuffleGifts(this.current.id, {
+      const result = await api.shuffleGifts(this.current.id, {
         exclude,
         answers: this.current.answers,
         currentPlan: clone(this.current),
       })
-      this.replaceCurrent({ gifts })
+      if (Array.isArray(result)) this.replaceCurrent({ gifts: result })
+      else this.replaceCurrent(result)
     },
 
     async regenerateLetter(tone, instruction = '') {
