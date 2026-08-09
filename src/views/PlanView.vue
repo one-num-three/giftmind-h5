@@ -227,10 +227,14 @@ function onToggleLock(id) {
 async function onSelectGift(gift) {
   const id = giftKey(gift)
   if (!id) return
+  const wasSelected = selectedGiftId.value === id
   planStore.replaceCurrent({ selectedGiftId: id, selectedGift: gift })
   if (!isLocked(id)) planStore.toggleLock(id)
-  ui.success('已选中；下面可以继续调整送出方案')
+  ui.success(wasSelected ? '这就是你选中的礼物' : '已选中，来看怎么送')
   await nextTick()
+  if (!wasSelected && !reducedMotion()) {
+    await new Promise((resolve) => window.setTimeout(resolve, 360))
+  }
   deliveryRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 

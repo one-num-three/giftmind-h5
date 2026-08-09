@@ -6,8 +6,10 @@
  * 收藏与「怎么送更好」都在卡片底部一行，展开用高度过渡，不跳版。
  * gift 里任何字段缺失都有兜底文案，不会渲染出 undefined。
  */
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick, onUnmounted, watch } from 'vue'
+import { gsap } from 'gsap'
 import { toArray } from '@/utils/helpers'
+import { REDUCED_MOTION_QUERY } from '@/utils/motion'
 import {
   rawEvidenceEntries,
   rawScoreEntries,
@@ -98,13 +100,49 @@ const hasRawEvidence = computed(() => (
 ))
 
 const tipOpen = ref(false)
+const cardRef = ref(null)
+
+function cardElement() {
+  return cardRef.value?.$el || cardRef.value
+}
+
+watch(
+  () => props.selected,
+  async (selected) => {
+    if (!selected) return
+    await nextTick()
+    const card = cardElement()
+    if (!card || window.matchMedia?.(REDUCED_MOTION_QUERY).matches) return
+    const marker = card.querySelector('.gift__selected-state')
+    gsap.killTweensOf([card, marker].filter(Boolean))
+    const timeline = gsap.timeline()
+    timeline.fromTo(
+      card,
+      { scale: 0.988, transformOrigin: '50% 55%' },
+      { scale: 1, duration: 0.38, ease: 'back.out(1.7)', clearProps: 'transform' },
+    )
+    if (marker) {
+      timeline.fromTo(
+        marker,
+        { autoAlpha: 0, y: -5 },
+        { autoAlpha: 1, y: 0, duration: 0.22, ease: 'power2.out', clearProps: 'opacity,visibility,transform' },
+        0.04,
+      )
+    }
+  },
+)
+
+onUnmounted(() => {
+  const card = cardElement()
+  if (card) gsap.killTweensOf([card, card.querySelector('.gift__selected-state')].filter(Boolean))
+})
 
 function toggleTip() {
   tipOpen.value = !tipOpen.value
 }
 
 function onLike() {
-  const id = g.value.id
+  const id = g.value.catalogId || g.value.id
   if (!id) return
   emit('toggle-like', id)
 }
@@ -150,13 +188,18 @@ function leave(el) {
 
 <template>
   <GCard
+    ref="cardRef"
     class="gift"
-    :class="{ 'is-primary': primary }"
+    :class="{ 'is-primary': primary, 'is-selected': selected }"
     padding="none"
     radius="xl"
     :tone="primary ? 'rose' : 'surface'"
   >
     <span v-if="primary" class="gift__badge">首选</span>
+    <span v-if="selected" class="gift__selected-state" aria-live="polite">
+      <GIcon name="check" :size="13" />
+      已选中
+    </span>
 
     <div class="gift__inner">
       <!-- ── 头部：emoji / 名称 / 契合度 ── -->
@@ -326,6 +369,9 @@ function leave(el) {
 .gift.is-primary {
   box-shadow: var(--sh-2);
 }
+.gift.is-selected {
+  box-shadow: 0 0 0 2px var(--c-sage-deep, var(--c-ink)), var(--sh-2);
+}
 
 .gift__badge {
   position: absolute;
@@ -437,6 +483,23 @@ function leave(el) {
   font-size: var(--fs-micro);
   color: var(--c-ink-4);
   white-space: nowrap;
+}
+
+.gift__selected-state {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  background: var(--c-sage-deep, var(--c-ink));
+  color: var(--c-paper);
+  font-size: var(--fs-micro);
+  font-weight: 700;
 }
 
 .gift__awards {
