@@ -48,7 +48,7 @@ function toneOf(i) {
           class="insight__chip"
           size="sm"
           :tone="toneOf(i)"
-          tabindex="-1"
+          :interactive="false"
         >
           {{ t }}
         </GChip>

@@ -212,7 +212,7 @@ function leave(el) {
 
         <div class="gift__title">
           <p class="gift__name">{{ name }}</p>
-          <GChip v-if="category" class="gift__cat" size="sm" :tone="categoryTone" tabindex="-1">
+          <GChip v-if="category" class="gift__cat" size="sm" :tone="categoryTone" :interactive="false">
             {{ category }}
           </GChip>
         </div>
@@ -812,6 +812,9 @@ function leave(el) {
   align-items: center;
   gap: 5px;
   margin-left: auto;
+  min-width: 44px;
+  min-height: 44px;
+  justify-content: flex-end;
   color: var(--c-rose-deep);
   font-size: var(--fs-micro);
 }

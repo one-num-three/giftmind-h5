@@ -57,8 +57,8 @@ function onBack() {
   backdrop-filter: none;
 }
 .g-nav__btn {
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -67,7 +67,7 @@ function onBack() {
 }
 .g-nav__right {
   width: auto;
-  min-width: 36px;
+  min-width: 44px;
   justify-content: flex-end;
 }
 .g-nav__center {

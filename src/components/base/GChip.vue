@@ -4,21 +4,24 @@ defineProps({
   disabled: Boolean,
   emoji: String,
   hint: String,
+  interactive: { type: Boolean, default: true },
   tone: { type: String, default: 'default' }, // default | rose | sage | lilac | sand | sky
   size: { type: String, default: 'md' }, // sm | md
 })
 </script>
 
 <template>
-  <button
-    class="g-chip tap"
-    :class="[`tone-${tone}`, `size-${size}`, { selected, disabled }]"
-    :disabled="disabled"
+  <component
+    :is="interactive ? 'button' : 'span'"
+    class="g-chip"
+    :class="[`tone-${tone}`, `size-${size}`, { tap: interactive, selected, disabled, 'is-static': !interactive }]"
+    :type="interactive ? 'button' : undefined"
+    :disabled="interactive ? disabled : undefined"
   >
     <span v-if="emoji" class="g-chip__emoji">{{ emoji }}</span>
     <span class="g-chip__label"><slot /></span>
     <span v-if="hint" class="g-chip__hint">{{ hint }}</span>
-  </button>
+  </component>
 </template>
 
 <style scoped>
@@ -35,7 +38,7 @@ defineProps({
   max-width: 100%;
 }
 .size-md {
-  height: 38px;
+  height: 44px;
   padding: 0 15px;
   font-size: var(--fs-sm);
 }
@@ -43,6 +46,9 @@ defineProps({
   height: 28px;
   padding: 0 11px;
   font-size: var(--fs-caption);
+}
+.size-sm:not(.is-static) {
+  height: 44px;
 }
 .g-chip__emoji {
   font-size: 14px;
