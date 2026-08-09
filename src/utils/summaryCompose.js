@@ -13,20 +13,42 @@ function listText(value, fallback = '') {
   return list.length ? list.join('、') : fallback
 }
 
+function recipientText(value) {
+  let recipient = text(value, '对方')
+  while (recipient.startsWith('送给')) recipient = recipient.slice(2).trim()
+  recipient = recipient.split(/，(?:为|年龄段|计划)/, 1)[0].trim()
+  return recipient || '对方'
+}
+
+function cleanSummaryNotes(value) {
+  const generatedPrefixes = [
+    '预算：',
+    '时间：',
+    '避开：',
+    '形式偏好：',
+    '活动城市层级：',
+    '活动参与者：',
+  ]
+  return text(value)
+    .split('；')
+    .map((part) => part.trim().replace(/^补充说明：/, ''))
+    .filter((part) => part && !generatedPrefixes.some((prefix) => part.startsWith(prefix)))
+    .join('；')
+}
+
 export function composeSummaryBlocks(answers = {}) {
-  const recipient = text(answers.recipient, '对方')
+  const recipient = recipientText(answers.recipient)
   const occasion = text(answers.occasion, '一个特别的日子')
   const timing = text(answers.timing)
 
-  let who = `送给${recipient}，为${occasion}`
-  if (timing) who += `，计划${timing}内送出`
+  let who = `送给${recipient}`
   const age = text(answers.recipientAge)
   if (age) who += `，年龄段：${age}`
 
-  const story =
-    text(answers.memory) ||
-    text(answers.relationshipNote) ||
-    '还没有提到具体的回忆，可以在下一步补充一句。'
+  const storyDetail = text(answers.memory) || text(answers.relationshipNote)
+  const story = storyDetail
+    ? `${occasion}：${storyDetail}`
+    : `${occasion}：还没有提到具体的回忆，可以补充一句。`
 
   const feeling = text(answers.feeling, '希望 TA 感到被认真对待')
 
@@ -46,16 +68,16 @@ export function composeSummaryBlocks(answers = {}) {
   if (cityTier) parts.push(`活动城市层级：${cityTier}`)
   if (answers.allParticipantsAdults === true) parts.push('活动参与者：全部成年')
   if (answers.allParticipantsAdults === false) parts.push('活动参与者：未全部确认成年')
-  const notes = text(answers.summaryNotes)
+  const notes = cleanSummaryNotes(answers.summaryNotes)
   if (notes) parts.push(`补充说明：${notes}`)
   const constraints = parts.length ? parts.join('；') : '暂无特殊约束'
 
   return {
-    who: { label: 'TA 是谁', text: who, fields: ['recipient', 'recipientAge'] },
-    story: { label: '你们的故事', text: story, fields: ['memory'] },
-    feeling: { label: '这次想表达什么', text: feeling, fields: ['feeling'] },
+    who: { label: '送给谁', text: who, fields: ['recipient', 'recipientAge'] },
+    story: { label: '为什么送', text: story, fields: ['occasion', 'memory', 'relationshipNote'] },
+    feeling: { label: '想表达什么', text: feeling, fields: ['feeling'] },
     constraints: {
-      label: '预算与约束',
+      label: '必须满足',
       text: constraints,
       fields: ['budget', 'timing', 'taboo', 'style', 'allParticipantsAdults', 'cityTierCode', 'summaryNotes'],
     },

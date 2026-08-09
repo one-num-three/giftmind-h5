@@ -77,22 +77,40 @@ export const useSessionStore = defineStore('session', {
       this.persistDraft()
     },
 
-    /** 摘要确认页的修改写回结构化答案，再走生成流程 */
+    /** 只写回能安全对应到单一结构化字段的摘要编辑。 */
     applySummaryEdits(edits) {
       const map = {
-        who: 'recipient',
         story: 'memory',
         feeling: 'feeling',
-        constraints: 'summaryNotes',
       }
       for (const [blockKey, value] of Object.entries(edits || {})) {
         const field = map[blockKey]
         if (!field) continue
-        const text = typeof value === 'string' ? value.trim() : ''
-        if (!text) continue
-        this.answers[field] = text
+        let editText = typeof value === 'string' ? value.trim() : ''
+        if (!editText) continue
+        if (blockKey === 'story') {
+          const occasion = String(this.answers.occasion || '一个特别的日子').trim()
+          const prefix = `${occasion}：`
+          if (editText.startsWith(prefix)) editText = editText.slice(prefix.length).trim()
+        }
+        if (editText) this.answers[field] = editText
       }
       this.persistDraft()
+    },
+
+    /** 从指定问题重新确认，避免把展示摘要反向写进结构化字段。 */
+    revisit(stepId) {
+      const snapshot = this.steps
+      const index = snapshot.findIndex((step) => step.id === stepId)
+      if (index < 0) return false
+      const affected = new Set(snapshot.slice(index).map((step) => step.key))
+      for (const key of affected) delete this.answers[key]
+      const firstMessageIndex = this.messages.findIndex((message) => message.stepId === stepId)
+      if (firstMessageIndex >= 0) this.messages.splice(firstMessageIndex)
+      this.stepIndex = index
+      this.status = 'asking'
+      this.persistDraft()
+      return true
     },
 
     /** 回到上一题（重新作答） */

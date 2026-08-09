@@ -19,17 +19,29 @@ const session = useSessionStore()
 const ui = useUiStore()
 
 const BLOCK_ORDER = ['who', 'story', 'feeling', 'constraints']
-const BLOCK_EMOJI = { who: '🫂', story: '📖', feeling: '💌', constraints: '🧭' }
+const DEFAULT_LABELS = {
+  who: '送给谁',
+  story: '为什么送',
+  feeling: '想表达什么',
+  constraints: '必须满足',
+}
+const EDITABLE_BLOCKS = new Set(['story', 'feeling'])
+const REVISIT_STEP = { who: 'recipient', constraints: 'budget' }
 
 const loading = ref(true)
 const source = ref('rule')
 const edits = reactive({})
+const labels = reactive({ ...DEFAULT_LABELS })
 let alive = true
 
 const answeredCount = computed(() => session.answeredCount)
 
 function blockText(key) {
   return typeof edits[key] === 'string' ? edits[key] : ''
+}
+
+function isEditable(key) {
+  return EDITABLE_BLOCKS.has(key)
 }
 
 function autoGrow(el) {
@@ -56,6 +68,7 @@ async function load() {
     for (const key of BLOCK_ORDER) {
       const block = summary[key]
       edits[key] = typeof block?.text === 'string' ? block.text : ''
+      labels[key] = typeof block?.label === 'string' ? block.label : DEFAULT_LABELS[key]
     }
     source.value = result?.source || 'rule'
   } catch {
@@ -71,7 +84,8 @@ function confirm() {
   router.replace('/generating')
 }
 
-function backToChat() {
+function backToChat(key = 'who') {
+  session.revisit(REVISIT_STEP[key] || 'recipient')
   router.replace('/chat')
 }
 
@@ -83,11 +97,11 @@ onUnmounted(() => {
 
 <template>
   <div class="page">
-    <GNavBar title="确认一下" subtitle="TA 是谁 · 你们的故事 · 想表达什么" />
+    <GNavBar title="AI 理解的是这些吗？" subtitle="先确认，再开始挑礼物" />
 
     <div class="page__body sum">
       <p class="sum__lead">
-        生成方案前，把理解到的信息整理成四块。哪一块不对，直接改掉。
+        故事和心意可以直接改；对象、预算与时间会影响筛选，需要回到选择题修改。
       </p>
 
       <template v-if="!loading">
@@ -97,19 +111,21 @@ onUnmounted(() => {
           class="sum__block anim-up"
         >
           <p class="sum__label">
-            <span class="sum__emoji" aria-hidden="true">{{ BLOCK_EMOJI[key] }}</span>
-            {{ key === 'who' ? 'TA 是谁' : key === 'story' ? '你们的故事' : key === 'feeling' ? '这次想表达什么' : '预算与约束' }}
+            <span>{{ labels[key] }}</span>
+            <small>{{ isEditable(key) ? '可直接修改' : '来自你的选择' }}</small>
           </p>
           <textarea
+            v-if="isEditable(key)"
             class="sum__area"
             rows="2"
             :value="blockText(key)"
             @input="onInput(key, $event)"
             @focus="(e) => autoGrow(e.target)"
           />
-          <p v-if="key === 'constraints'" class="sum__note">
-            预算、时间、禁忌的硬过滤仍以上一步的选项为准；这里只留补充说明。
-          </p>
+          <div v-else class="sum__fixed">
+            <p>{{ blockText(key) }}</p>
+            <button type="button" @click="backToChat(key)">修改这些选项</button>
+          </div>
         </section>
 
         <p v-if="source === 'rule'" class="sum__meta">根据你的回答整理 · 可直接修改</p>
@@ -122,7 +138,7 @@ onUnmounted(() => {
     </div>
 
     <div class="sum__footer">
-      <GButton variant="ghost" @click="backToChat">回去改</GButton>
+      <GButton variant="ghost" @click="backToChat('who')">重新检查选项</GButton>
       <GButton variant="dark" block :disabled="loading" @click="confirm">就按这些来</GButton>
     </div>
   </div>
@@ -149,14 +165,17 @@ onUnmounted(() => {
 .sum__label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: space-between;
+  gap: var(--s-3);
   margin-bottom: var(--s-2);
   font-weight: 600;
   font-size: var(--fs-caption);
   color: var(--c-ink);
 }
-.sum__emoji {
-  font-size: 16px;
+.sum__label small {
+  color: var(--c-ink-4);
+  font-size: var(--fs-micro);
+  font-weight: 500;
 }
 .sum__area {
   width: 100%;
@@ -176,11 +195,23 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px var(--c-rose);
   outline: none;
 }
-.sum__note {
+.sum__fixed {
+  padding: 12px 14px;
+  background: var(--c-paper);
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+}
+.sum__fixed p {
+  color: var(--c-ink);
+  font-size: var(--fs-body);
+  line-height: 1.7;
+}
+.sum__fixed button {
+  min-height: 40px;
   margin-top: var(--s-2);
-  font-size: var(--fs-micro);
-  color: var(--c-ink-4);
-  line-height: 1.6;
+  color: var(--c-rose-deep);
+  font-size: var(--fs-caption);
+  font-weight: 700;
 }
 .sum__meta {
   text-align: center;
@@ -217,7 +248,8 @@ onUnmounted(() => {
   display: flex;
   gap: var(--s-2);
   padding: 12px var(--s-3) calc(var(--safe-bottom) + 12px);
-  background: linear-gradient(to top, var(--c-paper) 70%, transparent);
+  background: var(--c-paper);
+  border-top: 1px solid var(--c-line);
 }
 .sum__footer :deep(.g-btn--dark) {
   flex: 1;
