@@ -8,16 +8,22 @@
  */
 import { ref, computed } from 'vue'
 import { toArray } from '@/utils/helpers'
+import {
+  rawEvidenceEntries,
+  rawScoreEntries,
+  recommendationExplanation,
+} from '@/utils/recommendationExplain'
 
 const props = defineProps({
   gift: { type: Object, default: () => ({}) },
   primary: Boolean,
   liked: Boolean,
   locked: Boolean,
+  selected: Boolean,
   replacing: Boolean,
 })
 
-const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace'])
+const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace', 'select'])
 
 /** 礼物分类 → 标签配色 */
 const CATEGORY_TONE = {
@@ -38,9 +44,6 @@ const emoji = computed(() => text(g.value.emoji) || '🎁')
 const name = computed(() => text(g.value.name) || '一件还没起名的礼物')
 const category = computed(() => text(g.value.category))
 const categoryTone = computed(() => CATEGORY_TONE[category.value] || 'default')
-const why = computed(() => text(g.value.why))
-const price = computed(() => text(g.value.price))
-const leadTime = computed(() => text(g.value.leadTime))
 const tip = computed(() => text(g.value.tip))
 const tags = computed(() =>
   toArray(g.value.tags)
@@ -84,6 +87,15 @@ const score = computed(() => {
 })
 const hasScore = computed(() => score.value > 0)
 const scoreCaption = computed(() => text(g.value.rankingLabel) || '推荐度')
+const explanation = computed(() => recommendationExplanation(g.value))
+const rawScores = computed(() => rawScoreEntries(g.value.scoreBreakdown))
+const rawEvidence = computed(() => rawEvidenceEntries(g.value.matchedEvidence))
+const hasRawEvidence = computed(() => (
+  hasScore.value
+  || dimensions.value.length > 0
+  || rawScores.value.length > 0
+  || rawEvidence.value.length > 0
+))
 
 const tipOpen = ref(false)
 
@@ -105,6 +117,11 @@ function onLock() {
 function onReplace() {
   const id = g.value.catalogId || g.value.id
   if (id && !props.locked && !props.replacing) emit('replace', id)
+}
+
+function onSelect() {
+  const id = g.value.catalogId || g.value.id
+  if (id) emit('select', g.value)
 }
 
 /* ── 展开/收起的高度过渡（无定时器） ───────── */
@@ -153,54 +170,87 @@ function leave(el) {
           </GChip>
         </div>
 
-        <div v-if="hasScore" class="score">
-          <svg class="score__svg" viewBox="0 0 44 44" fill="none" aria-hidden="true">
-            <circle class="score__track" cx="22" cy="22" r="19" stroke-width="3" />
-            <circle
-              class="score__fill"
-              cx="22"
-              cy="22"
-              r="19"
-              stroke-width="3"
-              stroke-linecap="round"
-              pathLength="100"
-              :stroke-dasharray="`${score} 100`"
-            />
-          </svg>
-          <span class="score__num">{{ score }}</span>
-          <span class="score__cap">{{ scoreCaption }}</span>
-        </div>
       </div>
 
       <div v-if="awards.length" class="gift__awards" aria-label="推荐榜单标签">
         <span v-for="award in awards" :key="award">{{ award }}</span>
       </div>
 
-      <!-- ── 为什么是它 ── -->
-      <p v-if="why" class="gift__why">{{ why }}</p>
+      <div class="gift__explanation">
+        <section class="explain-block explain-block--fit">
+          <h4>为什么适合 TA</h4>
+          <p>{{ explanation.fitReason }}</p>
+        </section>
 
-      <div v-if="dimensions.length" class="gift__dimensions" aria-label="多维评分">
-        <div v-for="dimension in dimensions" :key="dimension.key" class="gift__dimension">
-          <span>{{ dimension.label }}</span>
-          <strong>{{ dimension.value }}</strong>
-          <i aria-hidden="true"><b :style="{ width: `${dimension.value}%` }"></b></i>
+        <section v-if="explanation.matchedDetails.length" class="explain-block">
+          <h4>命中了你说的哪些细节</h4>
+          <ul class="matched-list">
+            <li v-for="detail in explanation.matchedDetails" :key="detail">{{ detail }}</li>
+          </ul>
+        </section>
+
+        <section class="explain-block explain-block--risk">
+          <h4>可能踩雷的地方</h4>
+          <ul>
+            <li v-for="caveat in explanation.caveats" :key="caveat">{{ caveat }}</li>
+          </ul>
+        </section>
+
+        <section class="explain-block">
+          <h4>价格与准备时间</h4>
+          <div class="gift__meta">
+            <span class="gift__price">{{ explanation.price }}</span>
+            <span class="gift__dot" />
+            <span class="gift__lead">
+              <GIcon name="clock" :size="13" />
+              {{ explanation.leadTime }}
+            </span>
+          </div>
+        </section>
+      </div>
+
+      <details v-if="hasRawEvidence" class="raw-evidence">
+        <summary>
+          <span>查看原始推荐依据</span>
+          <GIcon name="chevronDown" :size="15" />
+        </summary>
+        <div class="raw-evidence__body">
+          <p v-if="hasScore" class="raw-evidence__score">{{ scoreCaption }} {{ score }} 分</p>
+          <div v-if="dimensions.length" class="gift__dimensions" aria-label="多维评分">
+            <div v-for="dimension in dimensions" :key="dimension.key" class="gift__dimension">
+              <span>{{ dimension.label }}</span>
+              <strong>{{ dimension.value }}</strong>
+              <i aria-hidden="true"><b :style="{ width: `${dimension.value}%` }"></b></i>
+            </div>
+          </div>
+          <dl v-if="rawScores.length" class="raw-list">
+            <div v-for="entry in rawScores" :key="entry.key">
+              <dt>{{ entry.label }}</dt>
+              <dd>{{ entry.value > 0 ? '+' : '' }}{{ entry.value }}</dd>
+            </div>
+          </dl>
+          <dl v-if="rawEvidence.length" class="raw-matches">
+            <div v-for="entry in rawEvidence" :key="entry.key">
+              <dt>{{ entry.label }}</dt>
+              <dd>{{ entry.values.join('、') }}</dd>
+            </div>
+          </dl>
+          <div v-if="tags.length" class="gift__tags">
+            <span v-for="(t, i) in tags" :key="`${t}-${i}`" class="gift__tag">{{ t }}</span>
+          </div>
         </div>
-      </div>
+      </details>
 
-      <!-- ── 价格 / 备货 ── -->
-      <div v-if="price || leadTime" class="gift__meta">
-        <span v-if="price" class="gift__price">{{ price }}</span>
-        <span v-if="price && leadTime" class="gift__dot" />
-        <span v-if="leadTime" class="gift__lead">
-          <GIcon name="clock" :size="13" />
-          {{ leadTime }}
-        </span>
-      </div>
-
-      <!-- ── 标签 ── -->
-      <div v-if="tags.length" class="gift__tags">
-        <span v-for="(t, i) in tags" :key="`${t}-${i}`" class="gift__tag">{{ t }}</span>
-      </div>
+      <button
+        class="choose tap"
+        :class="{ 'is-selected': selected }"
+        type="button"
+        :aria-pressed="selected ? 'true' : 'false'"
+        @click="onSelect"
+      >
+        <span>{{ selected ? '已选中，查看送出方案' : '选它，继续生成送出方案' }}</span>
+        <GIcon name="arrowRight" :size="17" />
+      </button>
 
       <!-- ── 底部一行 ── -->
       <div class="gift__foot">
@@ -404,6 +454,57 @@ function leave(el) {
   font-weight: 650;
 }
 
+.gift__explanation {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-4);
+}
+.explain-block {
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c-surface) 88%, transparent);
+}
+.explain-block--fit {
+  border-color: color-mix(in srgb, var(--c-rose) 22%, var(--c-line));
+}
+.explain-block--risk {
+  background: color-mix(in srgb, var(--c-sand-soft) 42%, var(--c-surface));
+}
+.explain-block h4 {
+  margin: 0 0 6px;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--ls-wide);
+}
+.explain-block p,
+.explain-block li {
+  color: var(--c-ink-2);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+}
+.explain-block ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 1.15em;
+}
+.matched-list {
+  list-style: none;
+  padding-left: 0 !important;
+}
+.matched-list li::before {
+  content: '“';
+  color: var(--c-rose-deep);
+  font-family: var(--f-serif);
+}
+.matched-list li::after {
+  content: '”';
+  color: var(--c-rose-deep);
+  font-family: var(--f-serif);
+}
+
 .gift__dimensions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -444,7 +545,97 @@ function leave(el) {
   height: 100%;
   display: block;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--c-rose), var(--c-sand));
+  background: var(--c-rose);
+}
+
+.raw-evidence {
+  margin-top: var(--s-3);
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+}
+.raw-evidence summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--c-ink-3);
+  cursor: pointer;
+  font-size: var(--fs-caption);
+  list-style: none;
+}
+.raw-evidence summary::-webkit-details-marker {
+  display: none;
+}
+.raw-evidence summary :deep(svg) {
+  transition: transform var(--t-base) var(--e-out);
+}
+.raw-evidence[open] summary :deep(svg) {
+  transform: rotate(180deg);
+}
+.raw-evidence__body {
+  padding: 0 0 var(--s-4);
+}
+.raw-evidence__score {
+  color: var(--c-ink-2);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+}
+.raw-list,
+.raw-matches {
+  display: grid;
+  gap: 7px;
+  margin-top: var(--s-3);
+}
+.raw-list > div,
+.raw-matches > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s-3);
+}
+.raw-list dt,
+.raw-list dd,
+.raw-matches dt,
+.raw-matches dd {
+  margin: 0;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  line-height: 1.55;
+}
+.raw-list dd {
+  color: var(--c-rose-deep);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.raw-matches dd {
+  max-width: 64%;
+  text-align: right;
+}
+
+.choose {
+  width: 100%;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+  padding: 0 var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--c-ink);
+  color: var(--c-paper);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  transition: transform var(--t-fast) var(--e-out), background-color var(--t-fast) var(--e-out);
+}
+.choose:active {
+  transform: scale(0.985);
+}
+.choose.is-selected {
+  background: var(--c-sage-deep, var(--c-ink));
+}
+.choose:focus-visible {
+  outline: 2px solid var(--c-rose);
+  outline-offset: 3px;
 }
 
 /* ── 正文 ─────────────────────────────────── */

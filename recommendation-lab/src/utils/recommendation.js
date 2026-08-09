@@ -100,6 +100,46 @@ export function evidenceList(candidate) {
   return []
 }
 
+export function humanExplanation(candidate = {}) {
+  const facts = uniqueStrings(candidate.matchedUserFacts || candidate.matchedDetails)
+  const caveats = uniqueStrings(candidate.caveats)
+  if (!caveats.length) {
+    caveats.push(
+      candidate.kind === 'activity'
+        ? '预订前确认门店、档期、适用人数和退款规则。'
+        : '下单前确认颜色、规格、库存和退换规则。',
+    )
+  }
+  const directReason = firstText(
+      candidate.whyForRecipient,
+      candidate.storyConnection,
+      candidate.whyTemplate,
+    )
+  const description = firstText(candidate.description)
+  const conciseDescription = description.slice(0, 72).replace(/[。！？!?]+$/, '')
+  const fitReason = directReason.length >= 12
+    ? directReason
+    : facts.length && description
+      ? `${facts[0].replace(/[。！？!?]+$/, '')}。${conciseDescription}，能把这条线索落成一份具体的心意。`
+      : description || directReason || '这件候选满足当前核心条件，值得进入最终比较。'
+  return {
+    fitReason,
+    matchedDetails: facts.slice(0, 4),
+    caveats: caveats.slice(0, 3),
+    price: firstText(candidate.priceText, candidate.price, '价格需确认'),
+    leadTime: firstText(candidate.leadTime, '准备时间需确认'),
+  }
+}
+
+function firstText(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
+}
+
+function uniqueStrings(value) {
+  const values = Array.isArray(value) ? value : [value]
+  return [...new Set(values.map((item) => firstText(item)).filter(Boolean))]
+}
+
 function formatEvidenceItem(item, fallbackLabel = '') {
   if (item === null || item === undefined || item === false) return []
   if (Array.isArray(item)) return item.flatMap((nested) => formatEvidenceItem(nested, fallbackLabel))

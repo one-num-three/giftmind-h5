@@ -5,6 +5,7 @@ import {
   clampIndex,
   dimensionEntries,
   dragDirection,
+  humanExplanation,
   numericScore,
 } from '../utils/recommendation.js'
 
@@ -126,6 +127,10 @@ function dimensions(candidate) {
   return dimensionEntries(candidate)
 }
 
+function explanation(candidate) {
+  return humanExplanation(candidate)
+}
+
 function visibleAwards(candidate) {
   return (candidate.awards || []).filter((award) => award !== props.scoreLabel)
 }
@@ -192,36 +197,60 @@ function visibleAwards(candidate) {
                 <p>{{ candidate.category || '精选礼物' }}</p>
                 <h3>{{ candidate.name }}</h3>
               </div>
-              <div class="total-score" :aria-label="`${scoreLabel}得分 ${rankingScore(candidate)} 分`">
-                <strong>{{ rankingScore(candidate) }}</strong>
-                <span>{{ scoreLabel }}</span>
-              </div>
             </div>
 
             <div v-if="visibleAwards(candidate).length" class="award-row" aria-label="其他榜单标签">
               <span v-for="award in visibleAwards(candidate)" :key="award">{{ award }}</span>
             </div>
 
-            <p class="price-text">{{ candidate.priceText || '价格待确认' }}</p>
             <p class="gift-description">{{ candidate.description || '暂无详细说明，请结合评分依据判断。' }}</p>
 
-            <div v-if="dimensions(candidate).length" class="dimension-grid" aria-label="多维评分">
-              <div v-for="dimension in dimensions(candidate)" :key="dimension.key" class="dimension-item">
-                <div>
-                  <span>{{ dimension.label }}</span>
-                  <strong>{{ dimension.value }}</strong>
-                </div>
-                <i aria-hidden="true"><b :style="{ width: `${dimension.value}%` }"></b></i>
-              </div>
+            <div class="human-reasons">
+              <section>
+                <h4>为什么适合 TA</h4>
+                <p>{{ explanation(candidate).fitReason }}</p>
+              </section>
+              <section v-if="explanation(candidate).matchedDetails.length">
+                <h4>命中了你说的哪些细节</h4>
+                <ul class="human-reasons__facts">
+                  <li v-for="fact in explanation(candidate).matchedDetails" :key="fact">{{ fact }}</li>
+                </ul>
+              </section>
+              <section class="human-reasons__risk">
+                <h4>可能踩雷的地方</h4>
+                <ul>
+                  <li v-for="caveat in explanation(candidate).caveats" :key="caveat">{{ caveat }}</li>
+                </ul>
+              </section>
+              <section>
+                <h4>价格与准备时间</h4>
+                <p class="human-reasons__meta">
+                  <strong>{{ explanation(candidate).price }}</strong>
+                  <span>{{ explanation(candidate).leadTime }}</span>
+                </p>
+              </section>
             </div>
 
             <details class="score-details">
               <summary>
-                <span>查看原始命中与评分依据</span>
+                <span>查看原始推荐依据</span>
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="m7 9 5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </summary>
+              <div class="raw-score-head">
+                <span>{{ scoreLabel }}</span>
+                <strong>{{ rankingScore(candidate) }} 分</strong>
+              </div>
+              <div v-if="dimensions(candidate).length" class="dimension-grid" aria-label="多维评分">
+                <div v-for="dimension in dimensions(candidate)" :key="dimension.key" class="dimension-item">
+                  <div>
+                    <span>{{ dimension.label }}</span>
+                    <strong>{{ dimension.value }}</strong>
+                  </div>
+                  <i aria-hidden="true"><b :style="{ width: `${dimension.value}%` }"></b></i>
+                </div>
+              </div>
               <ScoreBreakdown :candidate="candidate" />
             </details>
 
@@ -234,7 +263,7 @@ function visibleAwards(candidate) {
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m5 12 4 4L19 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
-              {{ selectedId === candidate.catalogId ? '已选中这个方案' : '选中这个方案' }}
+              {{ selectedId === candidate.catalogId ? '已选中，查看送出方案' : '选它，继续生成送出方案' }}
             </button>
           </div>
         </template>

@@ -5,6 +5,7 @@ import {
   dimensionEntries,
   dragDirection,
   evidenceList,
+  humanExplanation,
   numericScore,
   topScoreSources,
 } from '../src/utils/recommendation.js'
@@ -72,6 +73,33 @@ describe('recommendation helpers', () => {
       { key: 'distinctiveness', label: '特别度', value: 78 },
       { key: 'feasibility', label: '可执行度', value: 91.2 },
     ])
+  })
+
+  it('presents human reasons before technical scores', () => {
+    expect(humanExplanation({
+      kind: 'activity',
+      whyForRecipient: '回应了你们常一起看展的习惯。',
+      matchedUserFacts: ['你提到：常一起看展'],
+      caveats: ['周末档期可能紧张'],
+      priceText: '¥280–360',
+      leadTime: '建议提前 3 天确认',
+    })).toEqual({
+      fitReason: '回应了你们常一起看展的习惯。',
+      matchedDetails: ['你提到：常一起看展'],
+      caveats: ['周末档期可能紧张'],
+      price: '¥280–360',
+      leadTime: '建议提前 3 天确认',
+    })
+  })
+
+  it('expands vague slogans with user facts and catalog description', () => {
+    expect(humanExplanation({
+      whyForRecipient: '让心意闪耀',
+      description: '一条适合日常佩戴的简约手链。',
+      matchedUserFacts: ['你提到：她喜欢低调的纪念礼物。'],
+    }).fitReason).toBe(
+      '你提到：她喜欢低调的纪念礼物。一条适合日常佩戴的简约手链，能把这条线索落成一份具体的心意。',
+    )
   })
 })
 

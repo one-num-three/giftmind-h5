@@ -5,7 +5,7 @@
  * 自上而下：封面 → AI 洞察 → 四类推荐榜单 → 一封信 → 仪式流程 → 底部操作条。
  * 路由 /plan/:id?：带 id 从 historyStore 取，不带 id 用 planStore.current，两者都没有就回首页。
  */
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePlanStore } from '@/stores/plan'
 import { useHistoryStore } from '@/stores/history'
@@ -87,6 +87,8 @@ const activeRankingGroup = computed(() => (
   || null
 ))
 const displayedGifts = computed(() => activeRankingGroup.value?.candidates || comparisonGifts.value)
+const selectedGiftId = computed(() => text(plan.value?.selectedGiftId))
+const deliveryRef = ref(null)
 
 watch(rankingGroups, (groups) => {
   if (!groups.some((group) => group.key === activeRankingKey.value)) {
@@ -145,6 +147,16 @@ function onToggleLike(id) {
 function onToggleLock(id) {
   planStore.toggleLock(id)
   ui.success(isLocked(id) ? '已保留这件，后续调整不会替换它' : '已取消保留')
+}
+
+async function onSelectGift(gift) {
+  const id = giftKey(gift)
+  if (!id) return
+  planStore.replaceCurrent({ selectedGiftId: id, selectedGift: gift })
+  if (!isLocked(id)) planStore.toggleLock(id)
+  ui.success('已选中；下面可以继续调整送出方案')
+  await nextTick()
+  deliveryRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 const replaceOpen = ref(false)
@@ -427,10 +439,12 @@ onUnmounted(() => {
               :primary="i === 0"
               :liked="isLiked(giftKey(g))"
               :locked="isLocked(giftKey(g))"
+              :selected="selectedGiftId === giftKey(g)"
               :replacing="replacingId === giftKey(g)"
               @toggle-like="onToggleLike"
               @toggle-lock="onToggleLock"
               @replace="openReplace"
+              @select="onSelectGift"
             />
           </div>
           <GEmpty
@@ -442,7 +456,7 @@ onUnmounted(() => {
         </section>
 
         <!-- 信 -->
-        <section v-if="letter || letterLoading" class="sec anim-up d-3">
+        <section v-if="letter || letterLoading" ref="deliveryRef" class="sec anim-up d-3">
           <p class="section-label">替你写的信</p>
           <LetterCard :letter="letter || {}" :loading="letterLoading" @change-tone="onChangeTone" />
         </section>

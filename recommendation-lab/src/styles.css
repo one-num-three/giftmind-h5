@@ -1001,6 +1001,77 @@ textarea:disabled {
   -webkit-line-clamp: 3;
 }
 
+.human-reasons {
+  display: grid;
+  gap: 10px;
+}
+
+.human-reasons section {
+  padding: 12px 13px;
+  background: #fffdf8;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+.human-reasons__risk {
+  background: #fbf4e6 !important;
+}
+
+.human-reasons h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.human-reasons p,
+.human-reasons li {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.human-reasons ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 17px;
+}
+
+.human-reasons__facts {
+  padding-left: 0 !important;
+  list-style: none;
+}
+
+.human-reasons__facts li::before {
+  content: '“';
+  color: var(--brass-dark);
+}
+
+.human-reasons__facts li::after {
+  content: '”';
+  color: var(--brass-dark);
+}
+
+.human-reasons__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.human-reasons__meta strong {
+  color: var(--brass-dark);
+  font-size: 15px;
+}
+
+.human-reasons__meta span {
+  color: var(--muted);
+  text-align: right;
+}
+
 .score-details {
   overflow: hidden;
   background: var(--surface-warm);
@@ -1033,6 +1104,21 @@ textarea:disabled {
 
 .score-details[open] summary svg {
   transform: rotate(180deg);
+}
+
+.raw-score-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 13px 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.raw-score-head strong {
+  color: var(--brass-dark);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
 }
 
 .score-panel {
