@@ -93,6 +93,7 @@ const activeRankingGroup = computed(() => (
 const displayedGifts = computed(() => activeRankingGroup.value?.candidates || comparisonGifts.value)
 const selectedGiftId = computed(() => text(plan.value?.selectedGiftId))
 const selectingGiftId = computed(() => text(planStore.selectingGiftId))
+const recommendationsRef = ref(null)
 const deliveryRef = ref(null)
 
 watch(rankingGroups, (groups) => {
@@ -397,6 +398,11 @@ async function onCopyPlan() {
 
 function goShare() {
   moreOpen.value = false
+  if (!selectedGiftId.value) {
+    ui.showToast('先选一件礼物，我再替你整理可分享的送出方案')
+    recommendationsRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
   const id = plan.value?.id
   if (!id) {
     ui.error('这份方案还没存好，稍后再试')
@@ -505,7 +511,7 @@ onUnmounted(() => {
         </section>
 
         <!-- 礼物 -->
-        <section class="sec anim-up d-2">
+        <section ref="recommendationsRef" class="sec anim-up d-2">
           <div class="sec__head">
             <p class="section-label">礼物推荐 · 每榜 3 个</p>
             <button
@@ -619,7 +625,7 @@ onUnmounted(() => {
         <div class="actionbar__inner">
           <GButton variant="outline" size="lg" @click="restartOpen = true">重新策划</GButton>
           <GButton class="grow" variant="primary" size="lg" @click="goShare">
-            做成给 TA 的页面
+            {{ selectedGiftId ? '做成给 TA 的页面' : '先选一件礼物' }}
             <GIcon name="arrowRight" :size="17" />
           </GButton>
         </div>
