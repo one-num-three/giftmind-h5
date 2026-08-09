@@ -58,7 +58,7 @@ describe('plan store', () => {
   it('commits the selected gift only after its delivery plan succeeds', async () => {
     const store = usePlanStore()
     await store.generate({ recipient: '妈妈' })
-    const gift = { id: 'g1', catalogId: 'g1', name: '黄铜书签' }
+    const gift = { id: 'g1', catalogId: 'g1', name: '黄铜书签', emoji: '🔖' }
 
     const pending = store.selectGift(gift)
     expect(store.selectingGiftId).toBe('g1')
@@ -70,6 +70,7 @@ describe('plan store', () => {
     expect(store.current.letter.paragraphs[0]).toContain('黄铜书签')
     expect(store.current.ritual[0].title).toContain('黄铜书签')
     expect(store.current.deliverySource).toBe('deepseek')
+    expect(store.current.share.coverEmoji).toBe('🔖')
     expect(store.current.title).toBe('给妈妈的「黄铜书签」送出方案')
     expect(store.current.subtitle).toBe('已按你最终选中的礼物，重新整理心意表达与送出步骤')
     expect(store.current.recommendationTitle).toBe('服务端方案')

@@ -251,6 +251,7 @@ export const usePlanStore = defineStore('plan', {
           throw new Error('服务没有返回完整的送出方案')
         }
         const selectedGiftName = String(result.selectedGiftName || selectedGift.name || '这份礼物').trim()
+        const selectedGiftEmoji = String(selectedGift.emoji || '').trim()
         const heading = deliveryHeading(this.current, selectedGiftName)
         this.replaceCurrent({
           recommendationTitle: this.current.recommendationTitle || this.current.title || '',
@@ -259,6 +260,12 @@ export const usePlanStore = defineStore('plan', {
           subtitle: heading.subtitle,
           selectedGiftId: id,
           selectedGift,
+          share: {
+            ...(this.current.share && typeof this.current.share === 'object'
+              ? clone(this.current.share)
+              : {}),
+            ...(selectedGiftEmoji ? { coverEmoji: selectedGiftEmoji } : {}),
+          },
           letter: clone(result.letter),
           ritual: clone(result.ritual),
           deliverySource: result.source || '',
