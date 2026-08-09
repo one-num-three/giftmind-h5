@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { routeDirection, routeMotionSpec } from '@/utils/motion'
+import { nextTabIndex, routeDirection, routeMotionSpec } from '@/utils/motion'
 
 describe('route motion', () => {
   it('follows route depth in both directions', () => {
@@ -18,5 +18,13 @@ describe('route motion', () => {
     expect(normal.enterTo.duration + normal.leaveTo.duration).toBeLessThanOrEqual(0.5)
     expect(reduced.enterFrom).toEqual({ autoAlpha: 0 })
     expect(reduced.enterTo.duration).toBe(0.01)
+  })
+
+  it('wraps recommendation tabs and supports home/end keys', () => {
+    expect(nextTabIndex('ArrowRight', 3, 4)).toBe(0)
+    expect(nextTabIndex('ArrowLeft', 0, 4)).toBe(3)
+    expect(nextTabIndex('Home', 2, 4)).toBe(0)
+    expect(nextTabIndex('End', 1, 4)).toBe(3)
+    expect(nextTabIndex('Enter', 2, 4)).toBe(2)
   })
 })

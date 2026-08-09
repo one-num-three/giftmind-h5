@@ -32,3 +32,13 @@ export function routeMotionSpec(direction = 1, reduced = false) {
     },
   }
 }
+
+export function nextTabIndex(key, currentIndex, count) {
+  if (!Number.isInteger(count) || count <= 0) return -1
+  const current = Math.min(Math.max(Number(currentIndex) || 0, 0), count - 1)
+  if (key === 'Home') return 0
+  if (key === 'End') return count - 1
+  if (key === 'ArrowRight') return (current + 1) % count
+  if (key === 'ArrowLeft') return (current - 1 + count) % count
+  return current
+}

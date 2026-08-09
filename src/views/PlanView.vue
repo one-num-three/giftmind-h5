@@ -7,6 +7,7 @@
  */
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { gsap } from 'gsap'
 import { usePlanStore } from '@/stores/plan'
 import { useHistoryStore } from '@/stores/history'
 import { useSessionStore } from '@/stores/session'
@@ -14,6 +15,7 @@ import { useUiStore } from '@/stores/ui'
 import { copyText } from '@/utils/helpers'
 import api from '@/api'
 import { REPLACE_REASONS } from '@/api/contracts'
+import { nextTabIndex, REDUCED_MOTION_QUERY } from '@/utils/motion'
 import InsightBlock from '@/components/gift/InsightBlock.vue'
 import GiftCard from '@/components/gift/GiftCard.vue'
 import LetterCard from '@/components/gift/LetterCard.vue'
@@ -81,6 +83,8 @@ const rankingGroups = computed(() => (
     : []
 ))
 const activeRankingKey = ref('recommendation')
+const rankingDirection = ref(1)
+const rankingPanelRef = ref(null)
 const activeRankingGroup = computed(() => (
   rankingGroups.value.find((group) => group.key === activeRankingKey.value)
   || rankingGroups.value[0]
@@ -95,6 +99,76 @@ watch(rankingGroups, (groups) => {
     activeRankingKey.value = groups[0]?.key || 'recommendation'
   }
 })
+
+function reducedMotion() {
+  return window.matchMedia?.(REDUCED_MOTION_QUERY).matches === true
+}
+
+function rankingTabId(key) {
+  return `ranking-tab-${key}`
+}
+
+function rankingPanelId(key) {
+  return `ranking-panel-${key}`
+}
+
+function selectRanking(key, focus = false) {
+  const groups = rankingGroups.value
+  const currentIndex = groups.findIndex((group) => group.key === activeRankingKey.value)
+  const nextIndex = groups.findIndex((group) => group.key === key)
+  if (nextIndex < 0 || nextIndex === currentIndex) return
+  rankingDirection.value = nextIndex > currentIndex ? 1 : -1
+  activeRankingKey.value = key
+  if (focus) {
+    nextTick(() => document.getElementById(rankingTabId(key))?.focus())
+  }
+}
+
+function onRankingKeydown(event) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+  const groups = rankingGroups.value
+  const currentIndex = Math.max(0, groups.findIndex((group) => group.key === activeRankingKey.value))
+  const nextIndex = nextTabIndex(event.key, currentIndex, groups.length)
+  if (nextIndex < 0) return
+  event.preventDefault()
+  selectRanking(groups[nextIndex].key, true)
+}
+
+async function animateRanking() {
+  await nextTick()
+  const panel = rankingPanelRef.value
+  if (!panel || reducedMotion()) return
+  const cards = panel.querySelectorAll('.gift')
+  gsap.killTweensOf([panel, ...cards])
+  gsap.fromTo(
+    panel,
+    { autoAlpha: 0.25, x: rankingDirection.value * 12, willChange: 'transform, opacity' },
+    {
+      autoAlpha: 1,
+      x: 0,
+      duration: 0.3,
+      ease: 'power3.out',
+      clearProps: 'opacity,visibility,transform,willChange',
+    },
+  )
+  if (cards.length) {
+    gsap.fromTo(
+      cards,
+      { autoAlpha: 0, y: 14, scale: 0.992, willChange: 'transform, opacity' },
+      {
+        autoAlpha: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.36,
+        stagger: 0.055,
+        ease: 'power3.out',
+        clearProps: 'opacity,visibility,transform,willChange',
+      },
+    )
+  }
+}
+
+watch(activeRankingKey, animateRanking)
 const letter = computed(() => plan.value?.letter || null)
 const ritual = computed(() => (Array.isArray(plan.value?.ritual) ? plan.value.ritual : []))
 
@@ -132,6 +206,7 @@ async function onShuffle() {
   shuffling.value = true
   try {
     await planStore.shuffleGifts()
+    await animateRanking()
     ui.success('推荐榜单已更新')
   } catch {
     ui.error('没能换出新的，稍后再试')
@@ -341,6 +416,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (rankingPanelRef.value) {
+    gsap.killTweensOf([rankingPanelRef.value, ...rankingPanelRef.value.querySelectorAll('.gift')])
+  }
   scrollEl?.removeEventListener('scroll', onScroll)
   if (rafId) cancelAnimationFrame(rafId)
   rafId = 0
@@ -416,43 +494,55 @@ onUnmounted(() => {
             <button
               v-for="group in rankingGroups"
               :key="group.key"
+              :id="rankingTabId(group.key)"
               type="button"
               role="tab"
               :aria-selected="activeRankingGroup?.key === group.key"
+              :aria-controls="rankingPanelId(group.key)"
+              :aria-label="`${group.title}，${group.candidates.length} 个方案`"
+              :tabindex="activeRankingGroup?.key === group.key ? 0 : -1"
               :class="{ 'is-active': activeRankingGroup?.key === group.key }"
-              @click="activeRankingKey = group.key"
+              @click="selectRanking(group.key)"
+              @keydown="onRankingKeydown"
             >
               {{ group.title }}
-              <small>{{ group.candidates.length }}</small>
             </button>
           </div>
 
-          <p v-if="activeRankingGroup?.description" class="ranking-description">
-            {{ activeRankingGroup.description }}
-          </p>
+          <div
+            ref="rankingPanelRef"
+            class="ranking-panel"
+            :id="activeRankingGroup ? rankingPanelId(activeRankingGroup.key) : undefined"
+            :role="rankingGroups.length ? 'tabpanel' : undefined"
+            :aria-labelledby="activeRankingGroup ? rankingTabId(activeRankingGroup.key) : undefined"
+          >
+            <p v-if="activeRankingGroup?.description" class="ranking-description">
+              {{ activeRankingGroup.description }}
+            </p>
 
-          <div v-if="displayedGifts.length" class="gifts" :class="{ 'is-busy': shuffling }">
-            <GiftCard
-              v-for="(g, i) in displayedGifts"
-              :key="giftKey(g) || `gift-${i}`"
-              :gift="g"
-              :primary="i === 0"
-              :liked="isLiked(giftKey(g))"
-              :locked="isLocked(giftKey(g))"
-              :selected="selectedGiftId === giftKey(g)"
-              :replacing="replacingId === giftKey(g)"
-              @toggle-like="onToggleLike"
-              @toggle-lock="onToggleLock"
-              @replace="openReplace"
-              @select="onSelectGift"
+            <div v-if="displayedGifts.length" class="gifts" :class="{ 'is-busy': shuffling }">
+              <GiftCard
+                v-for="(g, i) in displayedGifts"
+                :key="`${activeRankingGroup?.key || 'comparison'}-${giftKey(g) || `gift-${i}`}`"
+                :gift="g"
+                :primary="i === 0"
+                :liked="isLiked(giftKey(g))"
+                :locked="isLocked(giftKey(g))"
+                :selected="selectedGiftId === giftKey(g)"
+                :replacing="replacingId === giftKey(g)"
+                @toggle-like="onToggleLike"
+                @toggle-lock="onToggleLock"
+                @replace="openReplace"
+                @select="onSelectGift"
+              />
+            </div>
+            <GEmpty
+              v-else
+              emoji="🎁"
+              title="这次没挑出合适的"
+              desc="换一批试试，或者回去把条件放宽一点。"
             />
           </div>
-          <GEmpty
-            v-else
-            emoji="🎁"
-            title="这次没挑出合适的"
-            desc="换一批试试，或者回去把条件放宽一点。"
-          />
         </section>
 
         <!-- 信 -->
@@ -860,21 +950,21 @@ onUnmounted(() => {
   border-radius: var(--r-md);
   font-size: var(--fs-micro);
   font-weight: 700;
+  transition:
+    color var(--t-fast) var(--e-out),
+    background-color var(--t-fast) var(--e-out),
+    transform var(--t-fast) var(--e-out);
+}
+
+.ranking-switch button:focus-visible {
+  outline: 2px solid var(--c-rose-deep);
+  outline-offset: 2px;
 }
 
 .ranking-switch button.is-active {
   color: var(--c-paper);
   background: var(--c-ink);
   box-shadow: var(--shadow-sm);
-}
-
-.ranking-switch small {
-  min-width: 17px;
-  padding: 1px 4px;
-  color: inherit;
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  border-radius: 99px;
-  font-size: 9px;
 }
 
 .ranking-description {
