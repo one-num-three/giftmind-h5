@@ -23,6 +23,7 @@ import { useRouter } from 'vue-router'
 import { useHistoryStore } from '@/stores/history'
 import { useUiStore } from '@/stores/ui'
 import { joinText, relativeTime, toArray } from '@/utils/helpers'
+import { recipientAwareCopy, recommendationKindLabel } from '@/utils/recommendationExplain'
 
 const props = defineProps({
   plan: { type: Object, default: () => ({}) },
@@ -56,21 +57,58 @@ const metaText = computed(() => {
   return joinText([short(a.recipient), short(a.occasion), when].filter(Boolean), ' · ')
 })
 
+function giftId(gift) {
+  return String(gift?.catalogId || gift?.id || '').trim()
+}
+
+const rankingGroups = computed(() => toArray(props.plan?.recommendationGroups))
+const candidates = computed(() => {
+  const source = rankingGroups.value.length
+    ? rankingGroups.value.flatMap((group) => toArray(group?.candidates))
+    : toArray(props.plan?.gifts)
+  const seen = new Set()
+  return source.filter((gift) => {
+    const key = giftId(gift) || String(gift?.name || '').trim()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+})
+const selectedGift = computed(() => {
+  if (props.plan?.selectedGift && typeof props.plan.selectedGift === 'object') {
+    return props.plan.selectedGift
+  }
+  const selectedId = String(props.plan?.selectedGiftId || '').trim()
+  return selectedId ? candidates.value.find((gift) => giftId(gift) === selectedId) : null
+})
+const selectedName = computed(() => recipientAwareCopy(
+  selectedGift.value?.name,
+  props.plan?.answers?.recipient,
+))
+const kindText = computed(() => {
+  const kinds = [...new Set(candidates.value.map(recommendationKindLabel).filter(Boolean))]
+  return kinds.length > 1 ? kinds.join(' + ') : kinds[0] || ''
+})
+
 const chips = computed(() => {
   const a = props.plan?.answers || {}
   const out = []
   const budget = short(a.budget)
   if (budget) out.push({ key: 'budget', tone: 'sand', text: budget })
 
-  const count = toArray(props.plan?.gifts).length
-  if (count) out.push({ key: 'gifts', tone: 'sage', text: `${count} 件礼物` })
-
-  const styles = toArray(a.style).map(short).filter(Boolean)
-  if (styles.length) {
+  if (selectedName.value) {
+    out.push({ key: 'selected', tone: 'sage', text: `已选 ${selectedName.value}` })
+  } else if (rankingGroups.value.length) {
     out.push({
-      key: 'style',
-      tone: 'lilac',
-      text: styles.length > 1 ? `${styles[0]} 等 ${styles.length} 种` : styles[0],
+      key: 'rankings',
+      tone: 'sage',
+      text: `${rankingGroups.value.length} 榜${kindText.value ? ` · ${kindText.value}` : ''}`,
+    })
+  } else if (candidates.value.length) {
+    out.push({
+      key: 'gifts',
+      tone: 'sage',
+      text: `${candidates.value.length} 个候选${kindText.value ? ` · ${kindText.value}` : ''}`,
     })
   }
   return out
@@ -438,7 +476,7 @@ onUnmounted(() => {
 }
 .prow__chip {
   flex-shrink: 0;
-  max-width: 96px;
+  max-width: 148px;
   height: 21px;
   padding: 0 8px;
   border-radius: var(--r-pill);

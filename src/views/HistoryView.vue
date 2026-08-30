@@ -88,7 +88,7 @@ onMounted(() => {
 
         <!-- 搜索 -->
         <div v-if="!isEmpty" class="search">
-          <span class="search__glass" aria-hidden="true" />
+          <GIcon class="search__glass" name="search" :size="16" aria-hidden="true" />
           <input
             v-model="keyword"
             class="search__input"
@@ -257,28 +257,9 @@ onMounted(() => {
 .search:focus-within {
   box-shadow: inset 0 0 0 1px var(--c-rose-soft);
 }
-/* 放大镜：图标集里没有现成的，用两个盒子拼一个，颜色跟随 currentColor */
 .search__glass {
-  position: relative;
-  width: 12px;
-  height: 12px;
   flex-shrink: 0;
-  margin-left: 2px;
-  border: 1.5px solid currentColor;
-  border-radius: 50%;
   color: var(--c-ink-4);
-}
-.search__glass::after {
-  content: '';
-  position: absolute;
-  right: -4px;
-  bottom: 1px;
-  width: 6px;
-  height: 1.5px;
-  border-radius: 1px;
-  background: currentColor;
-  transform: rotate(45deg);
-  transform-origin: left center;
 }
 .search__input {
   flex: 1;

@@ -151,4 +151,13 @@ describe('plan store', () => {
     expect(store.error).toBe('')
     expect(store.generationIssue).toBeNull()
   })
+
+  it('keeps local history plans readable when the optional replies request fails', async () => {
+    apiMock.fetchShareReplies.mockRejectedValueOnce(new Error('plan is local only'))
+    const store = usePlanStore()
+    store.current = { id: 'local-plan' }
+
+    await expect(store.loadReplies()).resolves.toEqual([])
+    expect(store.replies).toEqual([])
+  })
 })

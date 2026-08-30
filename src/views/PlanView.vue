@@ -92,6 +92,18 @@ const activeRankingGroup = computed(() => (
 ))
 const displayedGifts = computed(() => activeRankingGroup.value?.candidates || comparisonGifts.value)
 const selectedGiftId = computed(() => text(plan.value?.selectedGiftId))
+const selectedGift = computed(() => {
+  if (plan.value?.selectedGift && typeof plan.value.selectedGift === 'object') {
+    return plan.value.selectedGift
+  }
+  if (!selectedGiftId.value) return null
+  const candidates = [
+    ...gifts.value,
+    ...rankingGroups.value.flatMap((group) => group.candidates || []),
+  ]
+  return candidates.find((gift) => giftKey(gift) === selectedGiftId.value) || null
+})
+const selectedGiftName = computed(() => text(selectedGift.value?.name))
 const selectingGiftId = computed(() => text(planStore.selectingGiftId))
 const recommendationsRef = ref(null)
 const deliveryRef = ref(null)
@@ -249,6 +261,10 @@ async function onSelectGift(gift) {
   if (!wasSelected && !reducedMotion()) {
     await new Promise((resolve) => window.setTimeout(resolve, 360))
   }
+  deliveryRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function scrollToDelivery() {
   deliveryRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -448,7 +464,6 @@ onMounted(() => {
   }
   scrollEl = bodyRef.value
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
-  planStore.loadReplies()
 })
 
 onUnmounted(() => {
@@ -541,7 +556,8 @@ onUnmounted(() => {
               @click="selectRanking(group.key)"
               @keydown="onRankingKeydown"
             >
-              {{ group.title }}
+              <span>{{ group.title }}</span>
+              <small>{{ group.candidates.length }}</small>
             </button>
           </div>
 
@@ -568,6 +584,9 @@ onUnmounted(() => {
                 :selecting="selectingGiftId === giftKey(g)"
                 :selection-busy="Boolean(selectingGiftId)"
                 :replacing="replacingId === giftKey(g)"
+                :recipient="plan?.answers?.recipient"
+                :rank="i + 1"
+                :ranking-title="activeRankingGroup?.title"
                 @toggle-like="onToggleLike"
                 @toggle-lock="onToggleLock"
                 @replace="openReplace"
@@ -622,10 +641,21 @@ onUnmounted(() => {
       <div class="actionbar anim-in d-5">
         <span class="actionbar__fade" aria-hidden="true" />
         <span class="actionbar__glass" aria-hidden="true" />
+        <button
+          v-if="selectedGiftName"
+          class="actionbar__choice tap"
+          type="button"
+          @click="scrollToDelivery"
+        >
+          <span class="actionbar__choice-check"><GIcon name="check" :size="12" /></span>
+          <span class="actionbar__choice-label">已选</span>
+          <strong>{{ selectedGiftName }}</strong>
+          <span class="actionbar__choice-link">看送出方案</span>
+        </button>
         <div class="actionbar__inner">
           <GButton variant="outline" size="lg" @click="restartOpen = true">重新策划</GButton>
           <GButton class="grow" variant="primary" size="lg" @click="goShare">
-            {{ selectedGiftId ? '做成给 TA 的页面' : '先选一件礼物' }}
+            {{ selectedGiftId ? '下一步 · 做成给 TA 的页面' : '先选一件礼物' }}
             <GIcon name="arrowRight" :size="17" />
           </GButton>
         </div>
@@ -905,6 +935,49 @@ onUnmounted(() => {
   padding: var(--s-3) var(--page-x);
   padding-bottom: calc(var(--s-3) + var(--safe-bottom));
 }
+.actionbar__choice {
+  position: relative;
+  z-index: 1;
+  width: calc(100% - (var(--page-x) * 2));
+  min-height: 36px;
+  margin: var(--s-2) var(--page-x) 0;
+  padding: 6px var(--s-3);
+  display: grid;
+  grid-template-columns: 20px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--c-sage-soft) 74%, var(--c-surface));
+  color: var(--c-sage-deep);
+  text-align: left;
+}
+.actionbar__choice-check {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--c-sage-deep);
+  color: var(--c-paper);
+}
+.actionbar__choice-label,
+.actionbar__choice-link {
+  font-size: var(--fs-micro);
+  white-space: nowrap;
+}
+.actionbar__choice strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--c-ink);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+}
+.actionbar__choice-link {
+  color: var(--c-rose-deep);
+}
 /* 375 宽下两颗按钮要能并排放下，收一点左右内边距 */
 .actionbar__inner :deep(.g-btn--lg) {
   padding: 0 var(--s-4);
@@ -1001,14 +1074,20 @@ onUnmounted(() => {
 }
 
 .ranking-switch {
+  position: sticky;
+  top: calc(var(--navbar-h) + var(--s-2));
+  z-index: 6;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
   margin: 0 0 var(--s-3);
   padding: 5px;
-  background: var(--c-paper-2);
+  background: color-mix(in srgb, var(--c-paper-2) 92%, transparent);
   border: 1px solid var(--c-line);
   border-radius: var(--r-lg);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--c-paper) 76%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .ranking-switch button {
@@ -1030,6 +1109,19 @@ onUnmounted(() => {
     background-color var(--t-fast) var(--e-out),
     transform var(--t-fast) var(--e-out);
 }
+.ranking-switch button small {
+  min-width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  color: var(--c-ink-3);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
 
 .ranking-switch button:focus-visible {
   outline: 2px solid var(--c-rose-deep);
@@ -1040,6 +1132,10 @@ onUnmounted(() => {
   color: var(--c-paper);
   background: var(--c-ink);
   box-shadow: var(--shadow-sm);
+}
+.ranking-switch button.is-active small {
+  background: color-mix(in srgb, var(--c-surface) 14%, transparent);
+  color: var(--c-paper);
 }
 
 .ranking-description {

@@ -21,6 +21,35 @@ function text(value) {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function recipientPronoun(recipient) {
+  const value = text(recipient)
+  if (/女朋友|妻子|妈妈|母亲|女儿|姐姐|妹妹|姐妹|闺蜜|女性|女生|女同事|女老师/.test(value)) {
+    return '她'
+  }
+  if (/男朋友|丈夫|爸爸|父亲|儿子|哥哥|弟弟|兄弟|男性|男生|男同事|男老师/.test(value)) {
+    return '他'
+  }
+  return 'TA'
+}
+
+/**
+ * 目录文案经常自带“他/她”，但推荐对象可能不同。
+ * 这里只改礼物目录里的第三人称，不碰用户自己填写的回忆与原话。
+ */
+export function recipientAwareCopy(value, recipient = '') {
+  const source = text(value)
+  if (!source) return ''
+  const pronoun = recipientPronoun(recipient)
+
+  return source.replace(/[他她]/g, (matched, index, whole) => {
+    const before = whole[index - 1] || ''
+    const after = whole[index + 1] || ''
+    // “其他 / 吉他 / 他人”不是人物代词，必须原样保留。
+    if (matched === '他' && (before === '其' || before === '吉' || after === '人')) return matched
+    return pronoun
+  })
+}
+
 function list(value) {
   if (!Array.isArray(value)) return text(value) ? [text(value)] : []
   return value.map(text).filter(Boolean)
@@ -40,22 +69,26 @@ export function recommendationKindLabel(gift = {}) {
   return category
 }
 
-export function recommendationExplanation(gift = {}) {
-  const directReason = text(gift.whyForRecipient)
-    || text(gift.storyConnection)
-    || text(gift.why)
-    || text(gift.whyTemplate)
+export function recommendationExplanation(gift = {}, options = {}) {
+  const recipient = text(options.recipient)
+  const directReason = recipientAwareCopy(
+    text(gift.whyForRecipient)
+      || text(gift.storyConnection)
+      || text(gift.why)
+      || text(gift.whyTemplate),
+    recipient,
+  )
   const matchedDetails = unique(
     list(gift.matchedUserFacts).length
       ? list(gift.matchedUserFacts)
       : list(gift.matchedDetails),
   )
-  const description = text(gift.description)
+  const description = recipientAwareCopy(gift.description, recipient)
   const fitReason = directReason.length >= 12
     ? directReason
     : groundedReason(directReason, description, matchedDetails)
 
-  const caveats = unique(list(gift.caveats), 3)
+  const caveats = unique(list(gift.caveats).map((item) => recipientAwareCopy(item, recipient)), 3)
   if (!caveats.length) {
     caveats.push(
       gift.kind === 'activity'
