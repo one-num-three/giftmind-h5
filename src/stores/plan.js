@@ -299,7 +299,16 @@ export const usePlanStore = defineStore('plan', {
     },
 
     async loadReplies() {
-      this.replies = this.current?.id ? await api.fetchShareReplies({ planId: this.current.id }) : []
+      if (!this.current?.id) {
+        this.replies = []
+        return this.replies
+      }
+      try {
+        this.replies = await api.fetchShareReplies({ planId: this.current.id })
+      } catch {
+        // 历史方案可能只存在本机，后端自然查不到；回信是增强项，不应阻断方案浏览。
+        this.replies = []
+      }
       return this.replies
     },
 

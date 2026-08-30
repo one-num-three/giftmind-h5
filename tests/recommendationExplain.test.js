@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   rawEvidenceEntries,
   rawScoreEntries,
+  recipientAwareCopy,
   recommendationExplanation,
   recommendationKindLabel,
 } from '@/utils/recommendationExplain'
@@ -57,5 +58,28 @@ describe('recommendation explanation', () => {
     expect(recommendationKindLabel({ kind: 'product', category: '数字' })).toBe('礼物')
     expect(recommendationKindLabel({ giftTypeCode: 'activity', category: '线下活动' })).toBe('体验')
     expect(recommendationKindLabel({ category: '实物' })).toBe('礼物')
+  })
+
+  it('keeps catalog copy aligned with the recipient identity', () => {
+    expect(recipientAwareCopy('他愿望单里躺着的那款游戏', '女朋友 / 妻子')).toBe(
+      '她愿望单里躺着的那款游戏',
+    )
+    expect(recipientAwareCopy('她会在某个早上忽然想起这份礼物', '男朋友 / 丈夫')).toBe(
+      '他会在某个早上忽然想起这份礼物',
+    )
+    expect(recipientAwareCopy('给吉他配一套其他颜色的琴弦', '女朋友 / 妻子')).toBe(
+      '给吉他配一套其他颜色的琴弦',
+    )
+    expect(recipientAwareCopy('让她收到时会心一笑')).toBe('让TA收到时会心一笑')
+  })
+
+  it('only normalizes catalog prose and preserves the user-provided evidence', () => {
+    const result = recommendationExplanation({
+      whyForRecipient: '他会在通勤时反复用到。',
+      matchedUserFacts: ['你提到：她最近开始坐地铁上班。'],
+    }, { recipient: '女朋友 / 妻子' })
+
+    expect(result.fitReason).toBe('她会在通勤时反复用到。')
+    expect(result.matchedDetails).toEqual(['你提到：她最近开始坐地铁上班。'])
   })
 })

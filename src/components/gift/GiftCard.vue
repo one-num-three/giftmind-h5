@@ -13,6 +13,7 @@ import { REDUCED_MOTION_QUERY } from '@/utils/motion'
 import {
   rawEvidenceEntries,
   rawScoreEntries,
+  recipientAwareCopy,
   recommendationExplanation,
   recommendationKindLabel,
 } from '@/utils/recommendationExplain'
@@ -26,6 +27,9 @@ const props = defineProps({
   selecting: Boolean,
   selectionBusy: Boolean,
   replacing: Boolean,
+  recipient: { type: String, default: '' },
+  rank: { type: Number, default: 0 },
+  rankingTitle: { type: String, default: '' },
 })
 
 const emit = defineEmits(['toggle-like', 'toggle-lock', 'replace', 'choose'])
@@ -47,13 +51,13 @@ function text(v) {
 const g = computed(() => (props.gift && typeof props.gift === 'object' ? props.gift : {}))
 
 const emoji = computed(() => text(g.value.emoji) || '🎁')
-const name = computed(() => text(g.value.name) || '一件还没起名的礼物')
+const name = computed(() => recipientAwareCopy(g.value.name, props.recipient) || '一件还没起名的礼物')
 const selectionKey = computed(() => (
   g.value.catalogId || g.value.id || (name.value ? `legacy:${name.value}` : '')
 ))
 const category = computed(() => recommendationKindLabel(g.value))
 const categoryTone = computed(() => CATEGORY_TONE[category.value] || 'default')
-const tip = computed(() => text(g.value.tip))
+const tip = computed(() => recipientAwareCopy(g.value.tip, props.recipient))
 const tags = computed(() =>
   toArray(g.value.tags)
     .map(text)
@@ -95,8 +99,15 @@ const score = computed(() => {
   return Math.min(100, Math.max(0, Math.round(n)))
 })
 const hasScore = computed(() => score.value > 0)
-const scoreCaption = computed(() => text(g.value.rankingLabel) || '推荐度')
-const explanation = computed(() => recommendationExplanation(g.value))
+const scoreCaption = computed(() => text(g.value.rankingLabel) || text(props.rankingTitle) || '推荐度')
+const explanation = computed(() => recommendationExplanation(g.value, { recipient: props.recipient }))
+const featuredDetail = computed(() => explanation.value.matchedDetails.find((detail) => (
+  /你提到|你说过|你写到|回忆|一直记得/.test(detail)
+)) || '')
+const rankingBadge = computed(() => {
+  if (!props.rank) return ''
+  return props.rank === 1 ? '榜首' : `第 ${props.rank} 名`
+})
 const rawScores = computed(() => rawScoreEntries(g.value.scoreBreakdown))
 const rawEvidence = computed(() => rawEvidenceEntries(g.value.matchedEvidence))
 const hasRawEvidence = computed(() => (
@@ -106,7 +117,6 @@ const hasRawEvidence = computed(() => (
   || rawEvidence.value.length > 0
 ))
 
-const tipOpen = ref(false)
 const cardRef = ref(null)
 
 function cardElement() {
@@ -144,10 +154,6 @@ onUnmounted(() => {
   if (card) gsap.killTweensOf([card, card.querySelector('.gift__selected-state')].filter(Boolean))
 })
 
-function toggleTip() {
-  tipOpen.value = !tipOpen.value
-}
-
 function onLike() {
   const id = g.value.catalogId || g.value.id
   if (!id) return
@@ -168,103 +174,81 @@ function onSelect() {
   if (selectionKey.value && !props.selectionBusy) emit('choose', g.value)
 }
 
-/* ── 展开/收起的高度过渡（无定时器） ───────── */
-function beforeEnter(el) {
-  el.style.height = '0px'
-  el.style.opacity = '0'
-}
-function enter(el) {
-  el.style.height = `${el.scrollHeight}px`
-  el.style.opacity = '1'
-}
-function afterEnter(el) {
-  el.style.height = 'auto'
-}
-function beforeLeave(el) {
-  el.style.height = `${el.scrollHeight}px`
-  el.style.opacity = '1'
-}
-function leave(el) {
-  // 强制一次回流，让浏览器认下起始高度，否则不会过渡
-  void el.offsetHeight
-  el.style.height = '0px'
-  el.style.opacity = '0'
-}
 </script>
 
 <template>
   <GCard
     ref="cardRef"
     class="gift"
-    :class="{ 'is-primary': primary, 'is-selected': selected, 'is-selecting': selecting }"
+    :class="{ 'is-primary': primary, 'is-selected': selected, 'is-selecting': selecting, 'has-rank': rankingBadge }"
     padding="none"
     radius="xl"
     :tone="primary ? 'rose' : 'surface'"
   >
-    <span v-if="primary" class="gift__badge">首选</span>
+    <span v-if="rankingBadge" class="gift__badge">{{ rankingBadge }}</span>
     <span v-if="selected" class="gift__selected-state" aria-live="polite">
       <GIcon name="check" :size="13" />
       已选中
     </span>
 
     <div class="gift__inner">
-      <!-- ── 头部：emoji / 名称 / 契合度 ── -->
+      <!-- ── 头部：先让用户一眼看懂是什么、排第几、多少分 ── -->
       <div class="gift__head">
         <span class="gift__emoji">{{ emoji }}</span>
 
         <div class="gift__title">
           <p class="gift__name">{{ name }}</p>
-          <GChip v-if="category" class="gift__cat" size="sm" :tone="categoryTone" :interactive="false">
-            {{ category }}
-          </GChip>
+          <div class="gift__headline-meta">
+            <GChip v-if="category" class="gift__cat" size="sm" :tone="categoryTone" :interactive="false">
+              {{ category }}
+            </GChip>
+            <span v-if="hasScore" class="gift__score">{{ scoreCaption }} {{ score }} 分</span>
+          </div>
         </div>
-
       </div>
 
       <div v-if="awards.length" class="gift__awards" aria-label="推荐榜单标签">
         <span v-for="award in awards" :key="award">{{ award }}</span>
       </div>
 
-      <div class="gift__explanation">
-        <section class="explain-block explain-block--fit">
-          <h4>为什么适合 TA</h4>
-          <p>{{ explanation.fitReason }}</p>
-        </section>
-
-        <section v-if="explanation.matchedDetails.length" class="explain-block">
-          <h4>命中了你说的哪些细节</h4>
-          <ul class="matched-list">
-            <li v-for="detail in explanation.matchedDetails" :key="detail">{{ detail }}</li>
-          </ul>
-        </section>
-
-        <section class="explain-block explain-block--risk">
-          <h4>可能踩雷的地方</h4>
-          <ul>
-            <li v-for="caveat in explanation.caveats" :key="caveat">{{ caveat }}</li>
-          </ul>
-        </section>
-
-        <section class="explain-block">
-          <h4>价格与准备时间</h4>
-          <div class="gift__meta">
-            <span class="gift__price">{{ explanation.price }}</span>
-            <span class="gift__dot" />
-            <span class="gift__lead">
-              <GIcon name="clock" :size="13" />
-              {{ explanation.leadTime }}
-            </span>
-          </div>
-        </section>
+      <div class="gift__summary">
+        <p class="gift__why">{{ explanation.fitReason }}</p>
+        <p v-if="featuredDetail" class="gift__match">
+          <GIcon name="sparkle" :size="14" />
+          <span>{{ featuredDetail }}</span>
+        </p>
+        <div class="gift__meta">
+          <span class="gift__price">{{ explanation.price }}</span>
+          <span class="gift__dot" />
+          <span class="gift__lead">
+            <GIcon name="clock" :size="13" />
+            {{ explanation.leadTime }}
+          </span>
+        </div>
       </div>
 
-      <details v-if="hasRawEvidence" class="raw-evidence">
+      <details class="gift__details">
         <summary>
-          <span>查看原始推荐依据</span>
+          <span>完整理由、避雷与评分</span>
           <GIcon name="chevronDown" :size="15" />
         </summary>
-        <div class="raw-evidence__body">
-          <p v-if="hasScore" class="raw-evidence__score">{{ scoreCaption }} {{ score }} 分</p>
+        <div class="gift__details-body">
+          <section v-if="explanation.matchedDetails.length" class="detail-block">
+            <h4>命中了你说的哪些细节</h4>
+            <ul class="matched-list">
+              <li v-for="detail in explanation.matchedDetails" :key="detail">{{ detail }}</li>
+            </ul>
+          </section>
+          <section class="detail-block detail-block--risk">
+            <h4>确认后再下单 / 预订</h4>
+            <ul>
+              <li v-for="caveat in explanation.caveats" :key="caveat">{{ caveat }}</li>
+            </ul>
+          </section>
+          <section v-if="tip" class="detail-block detail-block--tip">
+            <h4>怎么送更好</h4>
+            <p>{{ tip }}</p>
+          </section>
           <div v-if="dimensions.length" class="gift__dimensions" aria-label="多维评分">
             <div v-for="dimension in dimensions" :key="dimension.key" class="gift__dimension">
               <span>{{ dimension.label }}</span>
@@ -287,6 +271,7 @@ function leave(el) {
           <div v-if="tags.length" class="gift__tags">
             <span v-for="(t, i) in tags" :key="`${t}-${i}`" class="gift__tag">{{ t }}</span>
           </div>
+          <p v-if="!hasRawEvidence" class="gift__details-note">当前只展示目录中已经确认的信息。</p>
         </div>
       </details>
 
@@ -300,7 +285,7 @@ function leave(el) {
         :aria-pressed="selected ? 'true' : 'false'"
         @click="onSelect"
       >
-        <span>{{ selecting ? '正在为它整理送出方案…' : selected ? '已选中，查看送出方案' : '选它，继续生成送出方案' }}</span>
+        <span>{{ selecting ? '正在为它整理送出方案…' : selected ? '查看信与送出方式' : '选这份方案' }}</span>
         <span v-if="selecting" class="choose__pulse" aria-hidden="true"><i /><i /><i /></span>
         <GIcon v-else name="arrowRight" :size="17" />
       </button>
@@ -340,34 +325,7 @@ function leave(el) {
           <span>{{ replacing ? '替换中…' : locked ? '已锁定' : '换一个' }}</span>
         </button>
 
-        <button
-          v-if="tip"
-          class="tipbtn tap"
-          :class="{ 'is-open': tipOpen }"
-          type="button"
-          :aria-expanded="tipOpen ? 'true' : 'false'"
-          @click="toggleTip"
-        >
-          <span>怎么送更好</span>
-          <GIcon name="chevronDown" :size="15" />
-        </button>
       </div>
-
-      <Transition
-        name="tip"
-        @before-enter="beforeEnter"
-        @enter="enter"
-        @after-enter="afterEnter"
-        @before-leave="beforeLeave"
-        @leave="leave"
-      >
-        <div v-if="tip && tipOpen" class="tip">
-          <div class="tip__inner">
-            <p class="tip__label">实操建议</p>
-            <p class="tip__text">{{ tip }}</p>
-          </div>
-        </div>
-      </Transition>
     </div>
   </GCard>
 </template>
@@ -403,7 +361,7 @@ function leave(el) {
 .gift__inner {
   padding: var(--s-5);
 }
-.gift.is-primary .gift__inner {
+.gift.has-rank .gift__inner {
   padding-top: var(--s-7);
 }
 
@@ -450,51 +408,23 @@ function leave(el) {
   font-size: var(--fs-h2);
 }
 .gift__cat {
-  margin-top: var(--s-2);
   pointer-events: none;
 }
-
-/* ── 契合度环 ─────────────────────────────── */
-.score {
-  position: relative;
-  flex-shrink: 0;
-  width: 46px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-.score__svg {
-  width: 46px;
-  height: 46px;
-  transform: rotate(-90deg);
-}
-.score__track {
-  stroke: var(--c-line);
-}
-.gift.is-primary .score__track {
-  stroke: var(--c-rose-soft);
-}
-.score__fill {
-  stroke: var(--c-rose);
-  transition: stroke-dasharray var(--t-slow) var(--e-out);
-}
-.score__num {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 46px;
+.gift__headline-meta {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-family: var(--f-display);
-  font-size: var(--fs-sm);
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: var(--s-2);
+}
+.gift__score {
+  padding: 4px 8px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--c-rose-soft) 66%, var(--c-surface));
   color: var(--c-rose-deep);
-}
-.score__cap {
-  margin-top: 2px;
   font-size: var(--fs-micro);
-  color: var(--c-ink-4);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -530,41 +460,30 @@ function leave(el) {
   font-weight: 650;
 }
 
-.gift__explanation {
-  display: grid;
-  gap: var(--s-3);
+.gift__summary {
   margin-top: var(--s-4);
-}
-.explain-block {
-  padding: var(--s-3) var(--s-4);
-  border: 1px solid var(--c-line);
+  padding: var(--s-4);
+  border: 1px solid color-mix(in srgb, var(--c-rose) 18%, var(--c-line));
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--c-surface) 88%, transparent);
 }
-.explain-block--fit {
-  border-color: color-mix(in srgb, var(--c-rose) 22%, var(--c-line));
-}
-.explain-block--risk {
-  background: color-mix(in srgb, var(--c-sand-soft) 42%, var(--c-surface));
-}
-.explain-block h4 {
-  margin: 0 0 6px;
-  color: var(--c-ink-3);
-  font-size: var(--fs-micro);
-  font-weight: 700;
-  letter-spacing: var(--ls-wide);
-}
-.explain-block p,
-.explain-block li {
-  color: var(--c-ink-2);
+.gift__why {
+  margin: 0;
   font-size: var(--fs-sm);
   line-height: var(--lh-normal);
+  color: var(--c-ink-2);
 }
-.explain-block ul {
+.gift__match {
   display: grid;
-  gap: 5px;
-  margin: 0;
-  padding-left: 1.15em;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  margin-top: var(--s-3);
+  color: var(--c-rose-deep);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-snug);
+}
+.gift__match :deep(svg) {
+  margin-top: 2px;
 }
 .matched-list {
   list-style: none;
@@ -624,12 +543,12 @@ function leave(el) {
   background: var(--c-rose);
 }
 
-.raw-evidence {
+.gift__details {
   margin-top: var(--s-3);
   border-top: 1px solid var(--c-line);
   border-bottom: 1px solid var(--c-line);
 }
-.raw-evidence summary {
+.gift__details summary {
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -639,22 +558,53 @@ function leave(el) {
   font-size: var(--fs-caption);
   list-style: none;
 }
-.raw-evidence summary::-webkit-details-marker {
+.gift__details summary::-webkit-details-marker {
   display: none;
 }
-.raw-evidence summary :deep(svg) {
+.gift__details summary :deep(svg) {
   transition: transform var(--t-base) var(--e-out);
 }
-.raw-evidence[open] summary :deep(svg) {
+.gift__details[open] summary :deep(svg) {
   transform: rotate(180deg);
 }
-.raw-evidence__body {
+.gift__details-body {
+  display: grid;
+  gap: var(--s-3);
   padding: 0 0 var(--s-4);
 }
-.raw-evidence__score {
+.detail-block {
+  padding: var(--s-3);
+  border-radius: var(--r-md);
+  background: var(--c-paper-2);
+}
+.detail-block--risk {
+  background: color-mix(in srgb, var(--c-sand-soft) 55%, var(--c-surface));
+}
+.detail-block--tip {
+  background: color-mix(in srgb, var(--c-sage-soft) 55%, var(--c-surface));
+}
+.detail-block h4 {
+  margin: 0 0 6px;
+  color: var(--c-ink-3);
+  font-size: var(--fs-micro);
+  font-weight: 700;
+  letter-spacing: var(--ls-wide);
+}
+.detail-block p,
+.detail-block li,
+.gift__details-note {
   color: var(--c-ink-2);
   font-size: var(--fs-sm);
-  font-weight: 700;
+  line-height: var(--lh-normal);
+}
+.detail-block ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 1.15em;
+}
+.gift__details-note {
+  color: var(--c-ink-3);
 }
 .raw-list,
 .raw-matches {
@@ -744,20 +694,12 @@ function leave(el) {
   35% { opacity: 1; transform: translateY(-2px); }
 }
 
-/* ── 正文 ─────────────────────────────────── */
-.gift__why {
-  margin-top: var(--s-4);
-  font-size: var(--fs-body);
-  line-height: var(--lh-normal);
-  color: var(--c-ink-2);
-}
-
 .gift__meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--s-2);
-  margin-top: var(--s-4);
+  margin-top: var(--s-3);
 }
 .gift__price {
   font-family: var(--f-display);
@@ -800,10 +742,10 @@ function leave(el) {
 
 /* ── 底部一行 ─────────────────────────────── */
 .gift__foot {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
+  gap: 4px;
   margin-top: var(--s-4);
   padding-top: var(--s-3);
   border-top: 1px solid var(--c-line);
@@ -813,10 +755,9 @@ function leave(el) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
-  min-width: 44px;
+  min-width: 0;
   min-height: 44px;
-  justify-content: flex-end;
+  justify-content: center;
   color: var(--c-rose-deep);
   font-size: var(--fs-micro);
 }
@@ -830,7 +771,9 @@ function leave(el) {
   align-items: center;
   gap: 6px;
   min-height: 44px;
-  padding-right: var(--s-3);
+  min-width: 0;
+  justify-content: center;
+  padding: 0 4px;
   color: var(--c-ink-3);
   font-size: var(--fs-caption);
   transition: color var(--t-fast) var(--e-out);
@@ -846,23 +789,6 @@ function leave(el) {
   white-space: nowrap;
 }
 
-.tipbtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 44px;
-  padding-left: var(--s-3);
-  color: var(--c-rose-deep);
-  font-size: var(--fs-caption);
-  white-space: nowrap;
-}
-.tipbtn :deep(svg) {
-  transition: transform var(--t-base) var(--e-out);
-}
-.tipbtn.is-open :deep(svg) {
-  transform: rotate(180deg);
-}
-
 @keyframes pop {
   0% {
     transform: scale(0.7);
@@ -873,36 +799,6 @@ function leave(el) {
   100% {
     transform: scale(1);
   }
-}
-
-/* ── 小贴士展开 ───────────────────────────── */
-.tip {
-  overflow: hidden;
-}
-.tip__inner {
-  margin-top: var(--s-3);
-  padding: var(--s-4);
-  border-radius: var(--r-md);
-  background: var(--c-paper-2);
-}
-.gift.is-primary .tip__inner {
-  background: var(--c-surface);
-}
-.tip__label {
-  font-size: var(--fs-micro);
-  letter-spacing: var(--ls-wide);
-  color: var(--c-ink-4);
-}
-.tip__text {
-  margin-top: var(--s-2);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-normal);
-  color: var(--c-ink-2);
-}
-
-.tip-enter-active,
-.tip-leave-active {
-  transition: height var(--t-base) var(--e-out), opacity var(--t-base) var(--e-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
