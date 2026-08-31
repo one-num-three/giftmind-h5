@@ -1,11 +1,9 @@
 /**
  * 会话 Store —— 一次「策划」从头到尾的所有状态
  * 消息流、答案、当前步骤、进度都在这里，页面只负责渲染。
- * 现已支持 Xiaomi MiMo 大模型动态出题与槽位自适应。
  */
 import { defineStore } from 'pinia'
 import { resolveSteps, stageLabel, progressOf } from '@/config/flow'
-import { INITIAL_STEP } from '@/api/aiQuestionEngine'
 import { uid } from '@/utils/helpers'
 import storage from '@/utils/storage'
 
@@ -20,23 +18,20 @@ export const useSessionStore = defineStore('session', {
     stepIndex: 0,
     status: 'idle', // idle | asking | waiting | done
     startedAt: 0,
-    activeDynamicStep: null,
     isAiReady: false,
   }),
 
   getters: {
-    /** 静态备用步骤序列 */
+    /** 完整专业步骤序列 */
     steps: (s) => resolveSteps(s.answers),
     currentStep() {
-      if (this.stepIndex === 0) return INITIAL_STEP
-      if (this.activeDynamicStep) return this.activeDynamicStep
       return this.steps[this.stepIndex] || null
     },
     isFinished() {
-      return this.isAiReady || this.stepIndex >= 6 || this.stepIndex >= this.steps.length
+      return this.isAiReady || this.stepIndex >= this.steps.length
     },
     progress() {
-      return progressOf(this.stepIndex, 5)
+      return progressOf(this.stepIndex, this.steps.length)
     },
     stageText() {
       const step = this.currentStep
@@ -52,7 +47,6 @@ export const useSessionStore = defineStore('session', {
         this.messages = []
         this.answers = {}
         this.stepIndex = 0
-        this.activeDynamicStep = null
         this.isAiReady = false
         this.startedAt = Date.now()
       }
@@ -71,11 +65,6 @@ export const useSessionStore = defineStore('session', {
         target.text = newText
         target.streaming = isStreaming
       }
-    },
-
-    setDynamicStep(step) {
-      this.activeDynamicStep = step
-      this.persistDraft()
     },
 
     forceFinish() {
@@ -163,7 +152,6 @@ export const useSessionStore = defineStore('session', {
     },
 
     persistDraft() {
-      // 存储时剔除未完成的流式状态
       const cleanMessages = this.messages.map((m) => ({
         ...m,
         streaming: false,
@@ -175,7 +163,6 @@ export const useSessionStore = defineStore('session', {
         stepIndex: this.stepIndex,
         messages: cleanMessages,
         startedAt: this.startedAt,
-        activeDynamicStep: this.activeDynamicStep,
         isAiReady: this.isAiReady,
       })
     },

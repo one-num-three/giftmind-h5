@@ -1,21 +1,17 @@
 /**
  * ══════════════════════════════════════════════════════════════
- *  useChatFlow —— 真实逐字流式打字机（Streaming Typewriter）与 AI 导演
+ *  useChatFlow —— 对话流控制器与流式打字机
  *
  *  核心职责：
- *    1. 用户作答瞬间 0 延迟逐字流式打出高情商懂行点评；
- *    2. 支持【⚡ 极速 (Fast)】与【☕ 沉浸 (Slow)】两种打字与节奏速率自由切换；
- *    3. MiMo / DeepSeek 智能模型动态追问；
- *    4. 稳定不卡顿、文字全部打完后选项气泡弹性出现；
- *    5. 彻底防止草稿残余文字卡死；
- *    6. 支持随时一键跳过直接出方案（quickFinish）。
+ *    1. 完整严密的专业多维度问卷（认识TA → 偏好 → 故事/痛点 → 定型）；
+ *    2. 真实逐字流式打字机（支持 ⚡极速 / ☕沉浸 模式）；
+ *    3. 支持随时一键跳过直接出方案（quickFinish）；
+ *    4. 稳定可靠，不卡顿、无残余死字。
  * ══════════════════════════════════════════════════════════════
  */
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import { fetchNextDynamicQuestion, INITIAL_STEP } from '@/api/aiQuestionEngine'
-import { getLiveReaction } from '@/api/mimoService'
 
 const DONE_TAG = '__done__'
 const FINISH_TEXT = '我已经完全听明白了，正在为您定制最具质感的送礼方案 ✨'
@@ -32,7 +28,7 @@ export function useChatFlow() {
     localStorage.setItem('gm_chat_speed', speedMode.value)
   }
 
-  /** AI 是否正在输出/思考中（true 时底部选项面板隐藏，打完后弹性展示） */
+  /** AI 是否正在输出中（true 时底部选项面板隐藏，打完后弹性展示） */
   const typing = ref(false)
   let activeRunId = 0
   let isDisposed = false
@@ -51,7 +47,7 @@ export function useChatFlow() {
   }
 
   /**
-   * 🌟 真实逐字打字机输出（按 speedMode 动态调整字符速率）
+   * 🌟 真实逐字打字机输出
    */
   async function streamSingleMessage(fullText, stepId, runId) {
     if (!fullText || typeof fullText !== 'string') return true
@@ -124,53 +120,25 @@ export function useChatFlow() {
     router.replace('/summary')
   }
 
-  /* ── 推进到下一题（由 AI 动态主导 + 真实逐字流式） ─────── */
+  /* ── 推进到下一题 ─────────────────────────────── */
   async function advance(lastAnsweredStep = null, lastAnswerValue = null) {
     const runId = startNewRun()
     typing.value = true
-
-    // 🌟 阶段 1：作答后瞬间 0 毫秒逐字流式打出懂行点评（Live Reaction）
-    if (lastAnsweredStep) {
-      try {
-        const reactionText = await getLiveReaction(lastAnsweredStep, lastAnswerValue, session.answers)
-        if (isRunValid(runId) && reactionText) {
-          await streamSingleMessage(reactionText, `${lastAnsweredStep.id}_reaction`, runId)
-          await delay(speedMode.value === 'fast' ? 40 : 100)
-        }
-      } catch (err) {
-        console.warn('Reaction error:', err)
-      }
-    }
 
     if (session.isFinished) {
       await finish(runId)
       return
     }
 
-    // 🌟 阶段 2：并行拉取/生成下一题
-    let nextStep = null
-    try {
-      const aiResult = await fetchNextDynamicQuestion(session.answers, session.messages, session.stepIndex)
-      if (aiResult?.isReady) {
-        session.forceFinish()
-        await finish(runId)
-        return
-      }
-      nextStep = aiResult
-      session.setDynamicStep(nextStep)
-    } catch (err) {
-      console.warn('AI question fetch error:', err)
-      nextStep = session.currentStep
-    }
-
+    const nextStep = session.currentStep
     if (!isRunValid(runId)) return
 
-    // 🌟 阶段 3：逐字流式打印下一题文本
+    // 逐字流式打印下一题文本
     if (nextStep && nextStep.messages?.length) {
       for (const m of nextStep.messages) {
         if (!isRunValid(runId)) break
         await streamSingleMessage(m, nextStep.id, runId)
-        await delay(speedMode.value === 'fast' ? 50 : 100)
+        await delay(speedMode.value === 'fast' ? 40 : 100)
       }
     }
 
@@ -229,7 +197,7 @@ export function useChatFlow() {
       finish(runId)
       return
     }
-    const step = session.currentStep || INITIAL_STEP
+    const step = session.currentStep
     if (!step) return
 
     // 检查当前题是否所有消息都已经完整展示过
@@ -240,7 +208,7 @@ export function useChatFlow() {
       return
     }
 
-    // 如果未完整展示（比如残余的单字碎片），清空当前题残余，干净打字输出
+    // 清空当前题残余，干净打字输出
     session.messages = session.messages.filter((m) => m.stepId !== step.id)
 
     typing.value = true
