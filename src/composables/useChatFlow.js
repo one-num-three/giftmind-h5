@@ -1,37 +1,31 @@
 /**
  * ══════════════════════════════════════════════════════════════
- *  useChatFlow —— 对话页的「导演」
+ *  useChatFlow —— AI 主导动态出题与对话流导演
  *
- *  页面只管渲染与转发用户动作，所有节奏都在这里：
- *    · 打字机：先出 TypingDots，停顿后再落气泡；一个 step 的多条
- *      messages 依次连发，中间留呼吸间隔
- *    · 推进：answer / skip 之后隔一拍再问下一题
- *    · 分支：只读 session.steps（已按 when 过滤），不自己判断条件
- *    · 收尾：isFinished 时补一句收尾语，然后去 /generating
- *    · 恢复：store 里已经有消息就直接呈现，不重播动画
- *
- *  取消机制：每次播放拿一个 run 号，任何新动作（作答/返回/卸载）
- *  都会让旧 run 失效，异步链在下一个检查点自行退出，
- *  不会在页面离开后继续 push 消息。
+ *  核心职责：
+ *    1. 首题极速直出（INITIAL_STEP）；
+ *    2. 后续每题由 Xiaomi MiMo (1000 TPS) 动态智能生成，精准见招拆招；
+ *    3. 严格适配现有 ChoicePanel / ChatBubble / Composer，确保 100% 稳定零崩溃；
+ *    4. 支持随时一键跳过直接出方案（quickFinish）。
  * ══════════════════════════════════════════════════════════════
  */
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import { getLiveReaction } from '@/api/mimoService'
+import { fetchNextDynamicQuestion, INITIAL_STEP } from '@/api/aiQuestionEngine'
 
 /** 一条气泡出现前的「正在输入」时长区间 */
-const TYPING_MIN = 500
-const TYPING_MAX = 800
+const TYPING_MIN = 450
+const TYPING_MAX = 750
 /** 同一 step 内两条气泡之间的间隔 */
-const BUBBLE_GAP = 300
+const BUBBLE_GAP = 280
 /** 用户作答后到下一题开口 */
-const AFTER_ANSWER = 350
+const AFTER_ANSWER = 300
 /** 收尾语说完到跳转 */
-const FINISH_HOLD = 900
+const FINISH_HOLD = 800
 
 const DONE_TAG = '__done__'
-const FINISH_TEXT = '我已经完全听明白了，正在为您定制最具质感的送礼方案。'
+const FINISH_TEXT = '我已经完全听明白了，正在为您定制最具质感的送礼方案 ✨'
 
 export function useChatFlow() {
   const session = useSessionStore()
@@ -81,17 +75,14 @@ export function useChatFlow() {
     return run === seq && !disposed
   }
 
-  /** 文案越长，"打字"越久，但始终落在 500–800ms 之间 */
   function typingDuration(text) {
     return Math.min(TYPING_MAX, TYPING_MIN + String(text || '').length * 8)
   }
 
   /**
    * 依次播放一组 AI 气泡
-   * @returns {Promise<boolean>} 是否完整播完（被取消则 false）
    */
   async function emitMessages(list, stepId, run) {
-    // 剧本是可配置资产，这里对形状做一次兜底
     const raw = Array.isArray(list) ? list : list ? [list] : []
     const msgs = raw.filter((t) => typeof t === 'string' && t.trim())
     for (let i = 0; i < msgs.length; i++) {
@@ -110,7 +101,6 @@ export function useChatFlow() {
     return true
   }
 
-  /** step.summary 允许自定义气泡里的展示文案；出错就退回 store 默认 */
   function displayOf(step, value) {
     if (typeof step?.summary !== 'function') return undefined
     try {
@@ -123,7 +113,6 @@ export function useChatFlow() {
 
   /* ── 收尾 ─────────────────────────────────────── */
   async function finish(run) {
-    // 已经说过收尾语（比如返回后又进来）就直接走
     if (session.messages.some((m) => m.stepId === DONE_TAG)) {
       router.replace('/summary')
       return
@@ -135,47 +124,50 @@ export function useChatFlow() {
     router.replace('/summary')
   }
 
-  /* ── 推进到下一题 ─────────────────────────────── */
+  /* ── 推进到下一题（由 AI 动态主导） ─────────────── */
   async function advance(lastAnsweredStep = null, lastAnswerValue = null) {
     const run = newRun()
     await delay(AFTER_ANSWER)
-    if (!alive(run)) return
-
-    // 🌟 痛点 1：实时 AI 懂行接话与情绪共鸣（Live Reaction）
-    if (lastAnsweredStep) {
-      typing.value = true
-      try {
-        const reaction = await getLiveReaction(lastAnsweredStep, lastAnswerValue, session.answers)
-        if (alive(run) && reaction) {
-          typing.value = false
-          session.pushMessage({ role: 'ai', text: reaction, stepId: `${lastAnsweredStep.id}_reaction` })
-          await delay(BUBBLE_GAP + 200)
-        }
-      } catch (err) {
-        console.warn('Reaction error:', err)
-      } finally {
-        typing.value = false
-      }
-    }
     if (!alive(run)) return
 
     if (session.isFinished) {
       await finish(run)
       return
     }
-    const step = session.currentStep
-    if (!step) return
-    await emitMessages(step.messages, step.id, run)
+
+    typing.value = true
+    let nextStep = null
+
+    try {
+      // 🚀 调用 MiMo 大模型动态出题
+      const aiResult = await fetchNextDynamicQuestion(session.answers, session.messages, session.stepIndex)
+      if (aiResult?.isReady) {
+        session.forceFinish()
+        typing.value = false
+        await finish(run)
+        return
+      }
+      nextStep = aiResult
+      session.setDynamicStep(nextStep)
+    } catch (err) {
+      console.warn('AI question fetch error:', err)
+      nextStep = session.currentStep
+    } finally {
+      typing.value = false
+    }
+
+    if (!alive(run)) return
+    if (nextStep && nextStep.messages?.length) {
+      await emitMessages(nextStep.messages, nextStep.id, run)
+    }
   }
 
   /* ── 对外动作 ─────────────────────────────────── */
 
-  /** 只接受「当前这一题」的提交，挡住连点造成的重复推进 */
   function isCurrent(step) {
     return Boolean(step) && !disposed && step.id === session.currentStep?.id
   }
 
-  /** 提交一步的答案（value 可以是字符串或数组） */
   function submit(step, value) {
     if (!isCurrent(step)) return
     cancel()
@@ -183,7 +175,6 @@ export function useChatFlow() {
     advance(step, value)
   }
 
-  /** 跳过当前题 */
   function skipStep(step) {
     if (!isCurrent(step)) return
     cancel()
@@ -191,10 +182,12 @@ export function useChatFlow() {
     advance(step, '')
   }
 
-  /**
-   * 回到上一题重答：store 会把该题之后的消息一并抹掉
-   * @returns {string[]} 上一题原来的答案，交给页面回填选中态
-   */
+  function quickFinish() {
+    session.forceFinish()
+    const run = newRun()
+    finish(run)
+  }
+
   function goBack() {
     if (disposed || session.stepIndex === 0) return []
     cancel()
@@ -207,11 +200,9 @@ export function useChatFlow() {
 
   /* ── 进场 ─────────────────────────────────────── */
   function boot() {
-    // 刷新后内存里空了，但本地还留着草稿 —— 接着聊
     if (!session.messages.length && !session.id && session.hasDraft()) {
       session.restoreDraft()
     }
-    // 已有会话则原样保留，全新才开一局
     session.start(false)
 
     const run = newRun()
@@ -219,10 +210,9 @@ export function useChatFlow() {
       finish(run)
       return
     }
-    const step = session.currentStep
+    const step = session.currentStep || INITIAL_STEP
     if (!step) return
 
-    // 这一题的提问已经在消息里了 —— 恢复场景，直接呈现不重播
     const asked = session.messages.some((m) => m.role === 'ai' && m.stepId === step.id)
     if (asked) return
 
@@ -235,7 +225,6 @@ export function useChatFlow() {
     typing.value = false
     timers.forEach((t) => clearTimeout(t))
     timers.clear()
-    // 唤醒还挂在 await 上的播放链，让它们在检查点自行退出
     waiting.forEach((wake) => wake())
     waiting.clear()
   }
@@ -243,9 +232,8 @@ export function useChatFlow() {
   onMounted(boot)
   onUnmounted(() => {
     dispose()
-    // 中途离开也别丢进度
     if (session.messages.length && !session.isFinished) session.persistDraft()
   })
 
-  return { typing, submit, skipStep, goBack, defer }
+  return { typing, submit, skipStep, goBack, quickFinish, defer }
 }

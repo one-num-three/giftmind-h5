@@ -20,7 +20,7 @@ const router = useRouter()
 const session = useSessionStore()
 const planStore = usePlanStore()
 const ui = useUiStore()
-const { typing, submit, skipStep, goBack, defer } = useChatFlow()
+const { typing, submit, skipStep, goBack, quickFinish, defer } = useChatFlow()
 
 const streamRef = ref(null)
 const footRef = ref(null)
@@ -189,7 +189,17 @@ onUnmounted(() => {
         <GIcon :name="atStart ? 'close' : 'back'" :size="20" />
       </button>
       <div class="chat__brand" role="heading" aria-level="1" data-route-focus>GiftMind</div>
-      <div class="chat__stage">{{ session.stageText }}</div>
+      <div class="chat__head-right">
+        <button
+          v-if="session.stepIndex >= 2"
+          class="chat__quick-btn tap"
+          type="button"
+          @click="quickFinish"
+        >
+          <span>✨ 随时看方案</span>
+        </button>
+        <div v-else class="chat__stage">{{ session.stageText }}</div>
+      </div>
     </header>
 
     <div ref="streamRef" class="chat__stream scroll-y">
@@ -315,6 +325,30 @@ onUnmounted(() => {
   font-size: var(--fs-micro);
   white-space: nowrap;
   flex-shrink: 0;
+}
+.chat__head-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.chat__quick-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.3);
+  cursor: pointer;
+  animation: pulse-quick 2s infinite ease-in-out;
+}
+@keyframes pulse-quick {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
 }
 
 /* ── 消息流 ───────────────────────────────── */

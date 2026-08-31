@@ -1,9 +1,11 @@
 /**
  * 会话 Store —— 一次「策划」从头到尾的所有状态
  * 消息流、答案、当前步骤、进度都在这里，页面只负责渲染。
+ * 现已支持 Xiaomi MiMo 大模型动态出题与槽位自适应。
  */
 import { defineStore } from 'pinia'
 import { resolveSteps, stageLabel, progressOf } from '@/config/flow'
+import { INITIAL_STEP } from '@/api/aiQuestionEngine'
 import { uid } from '@/utils/helpers'
 import storage from '@/utils/storage'
 
@@ -18,23 +20,27 @@ export const useSessionStore = defineStore('session', {
     stepIndex: 0,
     status: 'idle', // idle | asking | waiting | done
     startedAt: 0,
+    activeDynamicStep: null,
+    isAiReady: false,
   }),
 
   getters: {
-    /** 按当前答案解析出的步骤序列（支持条件分支） */
+    /** 静态备用步骤序列 */
     steps: (s) => resolveSteps(s.answers),
     currentStep() {
+      if (this.stepIndex === 0) return INITIAL_STEP
+      if (this.activeDynamicStep) return this.activeDynamicStep
       return this.steps[this.stepIndex] || null
     },
     isFinished() {
-      return this.stepIndex >= this.steps.length
+      return this.isAiReady || this.stepIndex >= 6 || this.stepIndex >= this.steps.length
     },
     progress() {
-      return progressOf(this.stepIndex, this.steps.length)
+      return progressOf(this.stepIndex, 5)
     },
     stageText() {
       const step = this.currentStep
-      return step ? stageLabel(step.stage) : '生成方案 4/4'
+      return step ? stageLabel(step.stage) : '生成方案'
     },
     answeredCount: (s) => Object.keys(s.answers).length,
   },
@@ -46,6 +52,8 @@ export const useSessionStore = defineStore('session', {
         this.messages = []
         this.answers = {}
         this.stepIndex = 0
+        this.activeDynamicStep = null
+        this.isAiReady = false
         this.startedAt = Date.now()
       }
       this.status = 'asking'
@@ -55,6 +63,16 @@ export const useSessionStore = defineStore('session', {
       const m = { id: uid('msg'), at: Date.now(), ...msg }
       this.messages.push(m)
       return m
+    },
+
+    setDynamicStep(step) {
+      this.activeDynamicStep = step
+      this.persistDraft()
+    },
+
+    forceFinish() {
+      this.isAiReady = true
+      this.persistDraft()
     },
 
     /** 记录一步的回答并前进 */
@@ -70,15 +88,12 @@ export const useSessionStore = defineStore('session', {
     },
 
     skip(step) {
-      // 多选字段的 API 契约始终是数组。保留这个类型可以避免真实后端
-      // 在“没有，跳过这题”时收到空字符串并返回 422。
       this.answers[step.key] = step.type === 'multi' ? [] : ''
       this.pushMessage({ role: 'user', text: '（跳过）', stepId: step.id, muted: true })
       this.stepIndex += 1
       this.persistDraft()
     },
 
-    /** 只写回能安全对应到单一结构化字段的摘要编辑。 */
     applySummaryEdits(edits) {
       const map = {
         story: 'memory',
@@ -99,7 +114,6 @@ export const useSessionStore = defineStore('session', {
       this.persistDraft()
     },
 
-    /** 应用服务端验证过的安全恢复项；年龄、对象和禁忌不允许在这里被静默修改。 */
     applyRecoveryPatch(patch) {
       let changed = false
       for (const [key, value] of Object.entries(patch || {})) {
@@ -111,7 +125,6 @@ export const useSessionStore = defineStore('session', {
       return changed
     },
 
-    /** 从指定问题重新确认，避免把展示摘要反向写进结构化字段。 */
     revisit(stepId) {
       const snapshot = this.steps
       const index = snapshot.findIndex((step) => step.id === stepId)
@@ -126,13 +139,11 @@ export const useSessionStore = defineStore('session', {
       return true
     },
 
-    /** 回到上一题（重新作答） */
     back() {
       if (this.stepIndex === 0) return
       this.stepIndex -= 1
-      const step = this.steps[this.stepIndex]
+      const step = this.currentStep
       if (step) delete this.answers[step.key]
-      // 移除该步骤之后的所有消息
       const idx = this.messages.findIndex((m) => m.stepId === step?.id && m.role === 'user')
       if (idx >= 0) this.messages.splice(idx)
       this.persistDraft()
@@ -150,6 +161,8 @@ export const useSessionStore = defineStore('session', {
         stepIndex: this.stepIndex,
         messages: this.messages,
         startedAt: this.startedAt,
+        activeDynamicStep: this.activeDynamicStep,
+        isAiReady: this.isAiReady,
       })
     },
 
