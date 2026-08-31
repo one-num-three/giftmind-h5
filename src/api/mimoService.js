@@ -10,7 +10,7 @@
 
 const MIMO_API_KEY = 'sk-cvqx5j4irwxdbv0lmlggjd9md013lndoplm6rkl0qm9vbh65'
 const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1'
-const MIMO_MODEL = 'mimo-v2.5-pro-ultraspeed'
+const MIMO_MODEL = 'mimo-v2.5'
 
 /**
  * 基础请求封装（直连小米 MiMo 极速大模型接口）
