@@ -161,6 +161,18 @@ async function copyLink() {
   }
 }
 
+async function copyWechatPass() {
+  if (!shareUrl.value) return
+  const pass = `🎁【来自 ${previewRecipient.value || '你'} 的专属心意盲盒】\n“生活偶尔需要一点盲盒带来的小确幸。这里有一份为你定制的神秘心意，点开开启拆盒时刻 👉 ${shareUrl.value}”`
+  try {
+    const ok = await copyText(pass)
+    if (ok) ui.success('微信神仙口令已复制，直接发到微信聊天框吧！')
+    else ui.error('复制失败，请手动复制链接')
+  } catch {
+    ui.error('复制失败')
+  }
+}
+
 function openPreview() {
   if (!shareId.value) return
   sheetOpen.value = false
@@ -307,15 +319,25 @@ function openPreview() {
         </button>
       </div>
 
+      <div class="wechat-pass-card grain">
+        <div class="wechat-pass-header">
+          <span class="badge-wx">✨ 微信神仙文案口令</span>
+        </div>
+        <p class="wechat-pass-text">“生活偶尔需要一点盲盒带来的小确幸。这里有一份为你定制的神秘心意，点开开启拆盒时刻 👉 ”</p>
+        <button type="button" class="wechat-pass-btn tap" @click="copyWechatPass">
+          <span>💬 一键复制微信口令发给 TA</span>
+        </button>
+      </div>
+
       <div class="done__note">
         <p class="done__note-title">把链接发给 TA</p>
         <p class="done__note-text">
-          微信、短信都行。不用再多说什么，TA 点开就会知道这是给谁的。
+          微信、短信、小红书私信都行。TA 点开即可体验 3D 丝带拆礼盒与查看手写信～
         </p>
       </div>
 
       <template #footer>
-        <GButton variant="primary" size="lg" block @click="openPreview">预览这个页面</GButton>
+        <GButton variant="primary" size="lg" block @click="openPreview">自己先预览拆盒效果</GButton>
         <GButton class="done__later" variant="ghost" size="md" block @click="sheetOpen = false">
           先不看了
         </GButton>
@@ -325,6 +347,49 @@ function openPreview() {
 </template>
 
 <style scoped>
+.wechat-pass-card {
+  margin: 16px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #fff1f2 0%, #fffbf5 100%);
+  border: 1px dashed rgba(244, 63, 94, 0.35);
+  border-radius: 14px;
+}
+.wechat-pass-header {
+  margin-bottom: 8px;
+}
+.badge-wx {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.1);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.wechat-pass-text {
+  font-size: 12.5px;
+  color: #4b5563;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.wechat-pass-btn {
+  width: 100%;
+  height: 42px;
+  border-radius: 10px;
+  background: #f43f5e;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.25);
+  cursor: pointer;
+}
+.wechat-pass-btn:active {
+  transform: scale(0.98);
+}
 .edit {
   padding-bottom: var(--s-8);
 }

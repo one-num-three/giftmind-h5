@@ -4,17 +4,12 @@
  *  ShareView —— 收礼人打开的那一页（/s/:shareId）
  *
  *  两幕：
- *    第一幕 EnvelopeCover 占满一屏，点一下开信，900ms 后退场；
- *    第二幕逐段揭示 —— 开场 → 信 → 礼物 → 接下来会发生什么 →
- *    署名 → 回一句话 → by GiftMind。
- *
- *  这一页是给收礼人看的，所以：
- *    · 不出现价格、契合度、任何「产品感」的数据
- *    · 仪式流程只留时间与那一步的名字，不把送礼人的操作说明抖出来
- *    · 任何字段缺了都要有替补文案，绝不显示 undefined 或空白
+ *    第一幕 EnvelopeCover（3D 虚拟拆礼盒 + 解丝带 + 礼花音效）；
+ *    第二幕逐段揭示 —— 问候 → 手写信 → 礼物揭晓 → 接下来会发生什么 →
+ *    【免问地址自主填报卡】 → 【快捷可爱感动回信】 → 署名。
  * ══════════════════════════════════════════════════════════════
  */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/api'
 import { useUiStore } from '@/stores/ui'
@@ -28,6 +23,7 @@ const ui = useUiStore()
 
 const THEMES = ['dawn', 'dusk', 'sage']
 const OPEN_MS = 900
+const QUICK_EMOTIONS = ['🥰 呜呜太感动了！', '🎉 超级喜欢这个！', '💖 谢谢你的用心～', '👀 期待开箱啦！']
 
 const loading = ref(true)
 const failed = ref(false)
@@ -40,6 +36,16 @@ const replyText = ref('')
 const repliedText = ref('')
 const replied = ref(false)
 const replying = ref(false)
+
+/* ── 免问地址：收件信息表单 ───────────────────── */
+const addressForm = reactive({
+  name: '',
+  phone: '',
+  address: '',
+  note: '',
+})
+const addressSubmitted = ref(false)
+const addressSubmitting = ref(false)
 
 const scrollRef = ref(null)
 const bgPos = ref(0)
@@ -124,11 +130,6 @@ function giftEmoji(g) {
 function giftName(g) {
   return text(g.name) || '一件为你挑的东西'
 }
-/**
- * 礼物理由是写给「送礼人」看的，里面可能直接引用了送礼人当初说的原话
- * （如「把「她一直说想学插花」记在心上之后…」）。收礼人读到会出戏，
- * 所以这里把带引号回述的那一句剥掉，只保留描述礼物本身的部分。
- */
 const SENDER_VOICE = /^[^。！？]*[「“][^」”]*[」”][^。！？]*[。！？]\s*/
 function giftWhy(g) {
   const raw = text(g.why)
@@ -168,7 +169,29 @@ function onScroll() {
   rafId = requestAnimationFrame(measure)
 }
 
-/* ── 回一句话（本地持久化到 shareId） ───────── */
+/* ── 提交收件地址 ───────────────────────────── */
+async function submitAddress() {
+  if (!addressForm.name.trim() || !addressForm.phone.trim() || !addressForm.address.trim()) {
+    ui.showToast('请完整填写姓名、电话和收件地址')
+    return
+  }
+  addressSubmitting.value = true
+  try {
+    const summary = `[📦 收件地址] 姓名: ${addressForm.name.trim()} | 电话: ${addressForm.phone.trim()} | 地址: ${addressForm.address.trim()}${addressForm.note.trim() ? ` | 备注: ${addressForm.note.trim()}` : ''}`
+    await api.sendShareReply(String(route.params.shareId || ''), summary)
+    addressSubmitted.value = true
+    try {
+      localStorage.setItem(`gm_recipient_addr_${route.params.shareId}`, JSON.stringify(addressForm))
+    } catch {}
+    ui.success('收件信息已送达送礼人')
+  } catch (err) {
+    ui.error('提交稍慢，请重试')
+  } finally {
+    addressSubmitting.value = false
+  }
+}
+
+/* ── 回一句话 ───────────────────────────────── */
 async function sendReply() {
   const t = replyText.value.trim()
   if (!t) {
@@ -207,9 +230,21 @@ onMounted(async () => {
     const previous = await api.fetchShareReplies({ shareId: String(route.params.shareId || '') })
     const latest = Array.isArray(previous) ? previous[previous.length - 1] : null
     if (latest?.content) {
-      repliedText.value = text(latest.content)
-      replied.value = true
+      if (latest.content.startsWith('[📦 收件地址]')) {
+        addressSubmitted.value = true
+      } else {
+        repliedText.value = text(latest.content)
+        replied.value = true
+      }
     }
+    // 读取历史保存的地址
+    try {
+      const savedAddr = localStorage.getItem(`gm_recipient_addr_${route.params.shareId}`)
+      if (savedAddr) {
+        Object.assign(addressForm, JSON.parse(savedAddr))
+        addressSubmitted.value = true
+      }
+    } catch {}
   } catch {
     if (alive) failed.value = true
   } finally {
@@ -239,7 +274,7 @@ onUnmounted(() => {
         </div>
         <GSkeleton width="164px" height="20px" radius="var(--r-pill)" />
         <GSkeleton width="236px" height="14px" radius="var(--r-pill)" />
-        <p class="state__note">正在把信取出来</p>
+        <p class="state__note">正在把心意盲盒取出来...</p>
       </div>
 
       <!-- ══ 打不开 ══ -->
@@ -266,10 +301,10 @@ onUnmounted(() => {
           </div>
         </RevealSection>
 
-        <!-- 礼物 -->
+        <!-- 礼物揭晓 -->
         <template v-if="showGifts">
           <RevealSection class="blk blk--tight">
-            <p class="lead__label">TA 给你准备的</p>
+            <p class="lead__label">TA 为你准备的礼物</p>
             <p class="lead__text">{{ giftLeadText }}</p>
           </RevealSection>
           <div class="gifts">
@@ -284,6 +319,37 @@ onUnmounted(() => {
             </RevealSection>
           </div>
         </template>
+
+        <!-- 免问地址：收礼人专属收件信息填报卡 -->
+        <RevealSection class="blk">
+          <div class="address-box grain">
+            <div class="address-box__head">
+              <span class="badge-ship">📦 配送信息</span>
+              <h4 class="address-box__title">填写您的专属收件地址</h4>
+              <p class="address-box__desc">心意准备向你奔赴，送礼人将根据此地址为你安排妥帖投递～</p>
+            </div>
+
+            <template v-if="!addressSubmitted">
+              <div class="address-form">
+                <input v-model="addressForm.name" class="addr-input" placeholder="收件人姓名 / 称呼" />
+                <input v-model="addressForm.phone" class="addr-input" placeholder="手机号码" type="tel" />
+                <textarea v-model="addressForm.address" class="addr-input addr-textarea" rows="2" placeholder="详细收货地址（省市区街道楼宇门牌）" />
+                <input v-model="addressForm.note" class="addr-input" placeholder="尺码/颜色偏好/备注（选填）" />
+                <button type="button" class="addr-btn tap" :disabled="addressSubmitting" @click="submitAddress">
+                  {{ addressSubmitting ? '正在提交…' : '确认送达地址 🚀' }}
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <div class="address-success">
+                <span class="success-icon">✅</span>
+                <p class="success-title">收件地址已妥善送达送礼人</p>
+                <p class="success-detail">{{ addressForm.name }} · {{ addressForm.phone }}<br>{{ addressForm.address }}</p>
+                <p class="success-sub">静候心意到家，愿你拆箱时满心欢喜！</p>
+              </div>
+            </template>
+          </div>
+        </RevealSection>
 
         <!-- 接下来会发生什么 -->
         <template v-if="showRitual">
@@ -314,25 +380,39 @@ onUnmounted(() => {
         <RevealSection v-if="allowReply" class="blk">
           <div class="reply">
             <template v-if="!replied">
-              <p class="reply__title">要回一句话吗</p>
-              <p class="reply__hint">写什么都行，TA 会看到。</p>
+              <p class="reply__title">给 TA 留一句心意回话</p>
+              <p class="reply__hint">写什么都行，TA 会在方案中看到你的留言。</p>
+
+              <!-- 快捷可爱反应 -->
+              <div class="quick-emotions">
+                <button
+                  v-for="emo in QUICK_EMOTIONS"
+                  :key="emo"
+                  type="button"
+                  class="emotion-pill tap"
+                  @click="replyText = emo"
+                >
+                  {{ emo }}
+                </button>
+              </div>
+
               <div class="reply__field">
                 <textarea
                   v-model="replyText"
                   class="reply__input"
                   rows="2"
                   maxlength="60"
-                  placeholder="比如：我很喜欢。"
+                  placeholder="或者写一句自己的心里话..."
                 />
               </div>
               <button type="button" class="reply__send tap" :disabled="replying" @click="sendReply">
-                {{ replying ? '正在送出…' : '送出这句话' }}
+                {{ replying ? '正在送出…' : '送出这句话 💌' }}
               </button>
             </template>
             <template v-else>
-              <p class="reply__title">你的回话已经送到</p>
+              <p class="reply__title">你的回话已经送达</p>
               <p class="reply__echo">「{{ repliedText }}」</p>
-              <p class="reply__hint">送礼的人会在方案里看到。</p>
+              <p class="reply__hint">送礼人已收到你的甜蜜回馈。</p>
             </template>
           </div>
         </RevealSection>
@@ -358,8 +438,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* ══ 三套色调 ══════════════════════════════
-   和 EnvelopeCover 用同一套 --sh-* 命名，全部由 token 组合。 */
 .t-dawn {
   --sh-bg: var(--g-dawn);
   --sh-key: var(--c-rose);
@@ -429,7 +507,7 @@ onUnmounted(() => {
   padding: 88px 0 calc(var(--s-9) + var(--safe-bottom));
 }
 .blk {
-  padding: 0 26px;
+  padding: 0 24px;
   margin-bottom: var(--s-10);
 }
 .blk--tight {
@@ -449,9 +527,9 @@ onUnmounted(() => {
 .open__line {
   margin-top: var(--s-4);
   font-family: var(--f-serif);
-  font-size: 25px;
-  font-weight: 500;
-  line-height: 1.66;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.6;
   color: var(--c-ink);
 }
 
@@ -459,16 +537,17 @@ onUnmounted(() => {
 .paper {
   position: relative;
   overflow: hidden;
-  padding: 34px 26px 30px;
+  padding: 30px 24px;
   border-radius: var(--r-xl);
   background: var(--sh-paper);
-  box-shadow: var(--sh-1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
 }
 .paper__salutation {
   font-family: var(--f-serif);
   font-size: var(--fs-h3);
+  font-weight: 600;
   color: var(--c-ink);
-  margin-bottom: var(--s-6);
+  margin-bottom: var(--s-5);
 }
 .paper__p {
   font-family: var(--f-serif);
@@ -478,7 +557,7 @@ onUnmounted(() => {
   text-align: justify;
 }
 .paper__p + .paper__p {
-  margin-top: var(--s-6);
+  margin-top: var(--s-5);
 }
 .paper__rule {
   display: block;
@@ -504,7 +583,7 @@ onUnmounted(() => {
 
 /* 礼物 */
 .gifts {
-  padding: 0 26px;
+  padding: 0 24px;
   margin-bottom: var(--s-10);
   display: flex;
   flex-direction: column;
@@ -514,10 +593,10 @@ onUnmounted(() => {
   display: flex;
   align-items: flex-start;
   gap: var(--s-4);
-  padding: var(--s-5) var(--s-5);
+  padding: var(--s-5);
   border-radius: var(--r-lg);
   background: var(--sh-card);
-  box-shadow: var(--sh-1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 .gift__emoji {
   flex-shrink: 0;
@@ -526,8 +605,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
-  line-height: 1;
+  font-size: 22px;
   border-radius: 50%;
   background: var(--sh-wash);
 }
@@ -538,8 +616,8 @@ onUnmounted(() => {
 }
 .gift__name {
   font-family: var(--f-serif);
-  font-size: var(--fs-h3);
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--c-ink);
 }
 .gift__why {
@@ -549,143 +627,210 @@ onUnmounted(() => {
   color: var(--c-ink-2);
 }
 
-/* 接下来会发生什么 */
+/* ══ 免问地址卡片 ═══════════════════════════ */
+.address-box {
+  background: linear-gradient(135deg, #ffffff 0%, #fffbf5 100%);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  border-radius: 20px;
+  padding: 24px 20px;
+  box-shadow: 0 12px 32px rgba(244, 63, 94, 0.08);
+}
+.address-box__head {
+  margin-bottom: 16px;
+}
+.badge-ship {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.1);
+  padding: 3px 10px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+.address-box__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #18181b;
+}
+.address-box__desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #71717a;
+  line-height: 1.5;
+}
+.address-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.addr-input {
+  width: 100%;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: #fff;
+  font-size: 13.5px;
+  color: var(--c-ink);
+  box-sizing: border-box;
+}
+.addr-input:focus {
+  border-color: #f43f5e;
+  outline: none;
+}
+.addr-textarea {
+  height: 64px;
+  padding: 10px 14px;
+  resize: none;
+}
+.addr-btn {
+  height: 46px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.3);
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.address-success {
+  text-align: center;
+  padding: 16px 8px;
+}
+.success-icon { font-size: 32px; }
+.success-title { font-size: 15px; font-weight: 700; color: #059669; margin: 8px 0 4px; }
+.success-detail { font-size: 13px; color: #4b5563; line-height: 1.6; }
+.success-sub { font-size: 12px; color: #9ca3af; margin-top: 8px; }
+
+/* 仪式 */
 .ritual {
-  padding: 0 26px;
+  padding: 0 24px;
   margin-bottom: var(--s-10);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
 }
 .rit {
-  position: relative;
-  padding: 0 0 var(--s-6) 26px;
-}
-.rit::before {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 14px;
-  bottom: 0;
-  width: 1px;
-  background: var(--c-line-strong);
-}
-.ritual > :last-child .rit::before {
-  display: none;
-}
-.ritual > :last-child .rit {
-  padding-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--sh-card);
 }
 .rit__dot {
-  position: absolute;
-  left: 0;
-  top: 5px;
-  width: 9px;
-  height: 9px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--sh-key);
-  opacity: 0.75;
+  flex-shrink: 0;
 }
 .rit__time {
-  font-size: var(--fs-micro);
-  letter-spacing: var(--ls-wide);
-  color: var(--sh-key);
+  font-size: 12px;
+  color: var(--c-ink-3);
+  margin-right: 6px;
 }
 .rit__title {
-  margin-top: var(--s-1);
-  font-family: var(--f-serif);
-  font-size: var(--fs-h3);
-  line-height: var(--lh-snug);
+  font-size: 14px;
+  font-weight: 500;
   color: var(--c-ink);
 }
 
 /* 署名 */
 .sign {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  text-align: right;
+  padding: 0 8px;
 }
 .sign__rule {
+  display: inline-block;
   width: 40px;
   height: 1px;
-  background: var(--c-line-strong);
-  margin-bottom: var(--s-4);
+  background: var(--sh-key);
+  margin-bottom: 8px;
 }
 .sign__name {
   font-family: var(--f-serif);
-  font-size: var(--fs-h3);
+  font-size: 15px;
+  font-weight: 600;
   color: var(--c-ink-2);
 }
 
-/* 回一句话 */
+/* 回复 */
 .reply {
-  padding: var(--s-6) var(--s-5);
-  border-radius: var(--r-xl);
-  background: var(--sh-wash);
+  background: var(--sh-card);
+  padding: 24px 20px;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.04);
 }
 .reply__title {
-  font-family: var(--f-serif);
-  font-size: var(--fs-h3);
+  font-size: 16px;
+  font-weight: 700;
   color: var(--c-ink);
 }
 .reply__hint {
-  margin-top: var(--s-2);
-  font-size: var(--fs-caption);
+  font-size: 12px;
   color: var(--c-ink-3);
+  margin: 4px 0 12px;
+}
+.quick-emotions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.emotion-pill {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--sh-wash);
+  color: var(--c-ink);
+  border: 1px solid rgba(0, 0, 0, 0.04);
 }
 .reply__field {
-  margin-top: var(--s-4);
-  border-radius: var(--r-md);
-  background: var(--c-surface);
-  box-shadow: inset 0 0 0 1px var(--c-line);
-  transition: box-shadow var(--t-base) var(--e-out);
-}
-.reply__field:focus-within {
-  box-shadow: inset 0 0 0 1px var(--sh-key);
+  margin-bottom: 12px;
 }
 .reply__input {
-  display: block;
   width: 100%;
-  min-height: 78px;
-  padding: var(--s-3) var(--s-4);
-  font-family: var(--f-serif);
-  font-size: var(--fs-body);
-  line-height: var(--lh-normal);
-  color: var(--c-ink);
-}
-.reply__input::placeholder {
-  color: var(--c-ink-4);
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  font-size: 13px;
+  resize: none;
+  box-sizing: border-box;
 }
 .reply__send {
   width: 100%;
-  height: 46px;
-  margin-top: var(--s-4);
-  border-radius: var(--r-pill);
+  height: 44px;
+  border-radius: 12px;
   background: var(--sh-key);
-  color: var(--c-ink-inverse);
-  font-size: var(--fs-sm);
-  font-weight: 500;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
 }
 .reply__echo {
-  margin-top: var(--s-4);
   font-family: var(--f-serif);
-  font-size: var(--fs-body);
-  line-height: var(--lh-loose);
-  color: var(--c-ink);
+  font-size: 15px;
+  color: var(--sh-key);
+  font-weight: 600;
+  margin: 10px 0;
 }
 
-/* 品牌 */
 .brand {
   display: block;
   width: 100%;
-  min-height: 44px;
-  font-family: var(--f-display);
-  font-size: var(--fs-micro);
-  letter-spacing: var(--ls-wider);
-  color: var(--c-ink-4);
   text-align: center;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .share {
-    transition: none;
-  }
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--c-ink-4);
+  background: none;
+  border: none;
+  padding: 20px 0;
 }
 </style>

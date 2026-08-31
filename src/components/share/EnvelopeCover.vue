@@ -1,82 +1,141 @@
 <script setup>
 /**
  * ══════════════════════════════════════════════════════════════
- *  EnvelopeCover —— 收礼人看到的第一幕
+ *  EnvelopeCover —— 3D 虚拟拆礼盒 / 微信心意盲盒第一幕
  *
- *  一整屏的信封。三套色调（暖晨 / 暮色 / 草木）由 .t-* 里的一组
- *  --sh-* 变量组合出来，组件内部只用变量，不认具体颜色。
- *
- *  开信动画（总长 900ms，纯 CSS transition，父组件给 opening）：
- *      0ms   火漆印裂开、缩小淡出
- *      0ms   封口绕上边缘 rotateX 翻起
- *    300ms   封口淡出（避免翻上去之后挡住信纸）
- *    240ms   信纸从封口里抽出上移
- *    560ms   整幕上移淡出
- *
- *  interactive=false 时用于编辑页的等比缩小预览：不可点、不发事件。
+ *  玩法：
+ *    1. 屏幕中央悬浮立体礼盒，带有发光丝带与蝴蝶结；
+ *    2. 手指滑动丝带或轻触礼盒，触发「解开丝带」手势；
+ *    3. 丝带飘散 + 盒盖 3D 旋转掀开 + 全屏五彩礼花爆炸 + Web Audio 晶莹八音盒音效；
+ *    4. 信纸与心意礼物缓缓升起，丝滑转场进入第二幕！
  * ══════════════════════════════════════════════════════════════
  */
-import { computed } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 
 const props = defineProps({
   theme: { type: String, default: 'dawn' }, // dawn | dusk | sage
   recipient: { type: String, default: '' },
   greeting: { type: String, default: '' },
   emoji: { type: String, default: '🎁' },
-  /** 由父组件驱动的开启态 */
   opening: { type: Boolean, default: false },
-  /** 预览态传 false */
   interactive: { type: Boolean, default: true },
 })
 
 const emit = defineEmits(['open'])
 
 const THEMES = ['dawn', 'dusk', 'sage']
-
 const theme = computed(() => (THEMES.includes(props.theme) ? props.theme : 'dawn'))
+
 const toText = computed(() => {
   const t = String(props.recipient || '').trim()
   return t ? `${t}，` : '喂，'
 })
 const greetText = computed(
-  () => String(props.greeting || '').trim() || '有些话当面说不出口，就写在这里了。',
+  () => String(props.greeting || '').trim() || '生活需要一点未知的小确幸，拆开看看吧。',
 )
-const sealEmoji = computed(() => String(props.emoji || '').trim() || '🎁')
+const boxEmoji = computed(() => String(props.emoji || '').trim() || '🎁')
 
-function onTap() {
-  if (!props.interactive || props.opening) return
-  emit('open')
+const touchStartX = ref(0)
+const touchStartY = ref(0)
+const ribbonUntied = ref(false)
+const confettiParticles = ref([])
+
+function playUnboxSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const now = ctx.currentTime
+    const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51] // C5, E5, G5, C6, E6
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'triangle'
+      osc.frequency.setValueAtTime(freq, now + idx * 0.07)
+      gain.gain.setValueAtTime(0.18, now + idx * 0.07)
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.07 + 0.7)
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now + idx * 0.07)
+      osc.stop(now + idx * 0.07 + 0.75)
+    })
+  } catch (e) {
+    // ignore audio block
+  }
+}
+
+function spawnConfetti() {
+  const colors = ['#f43f5e', '#fb7185', '#fbbf24', '#34d399', '#60a5fa', '#a78bfa', '#ffffff']
+  const count = 36
+  const list = []
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5
+    const distance = 80 + Math.random() * 160
+    const x = Math.cos(angle) * distance
+    const y = Math.sin(angle) * distance - 40
+    const color = colors[Math.floor(Math.random() * colors.length)]
+    const size = 6 + Math.random() * 8
+    const rot = Math.random() * 360
+    list.push({ id: i, x, y, color, size, rot })
+  }
+  confettiParticles.value = list
+}
+
+function triggerOpen() {
+  if (!props.interactive || props.opening || ribbonUntied.value) return
+  ribbonUntied.value = true
+  playUnboxSound()
+  spawnConfetti()
+  setTimeout(() => {
+    emit('open')
+  }, 280)
+}
+
+function onTouchStart(e) {
+  touchStartX.value = e.touches[0].clientX
+  touchStartY.value = e.touches[0].clientY
+}
+
+function onTouchEnd(e) {
+  const dx = e.changedTouches[0].clientX - touchStartX.value
+  const dy = e.changedTouches[0].clientY - touchStartY.value
+  if (Math.abs(dx) > 30 || Math.abs(dy) > 30) {
+    triggerOpen()
+  }
 }
 </script>
 
 <template>
   <div
     class="cover"
-    :class="[`t-${theme}`, { 'is-opening': opening, 'is-static': !interactive }]"
-    @click="onTap"
+    :class="[`t-${theme}`, { 'is-opening': opening, 'is-static': !interactive, 'is-untied': ribbonUntied }]"
+    @click="triggerOpen"
+    @touchstart="onTouchStart"
+    @touchend="onTouchEnd"
   >
     <span class="cover__glow cover__glow--a" />
     <span class="cover__glow cover__glow--b" />
 
-    <div class="cover__inner">
-      <p class="cover__eyebrow">有人给你准备了一份礼物</p>
+    <!-- 爆炸礼花粒子 -->
+    <div v-if="confettiParticles.length" class="confetti-container">
+      <span
+        v-for="p in confettiParticles"
+        :key="p.id"
+        class="confetti"
+        :style="{
+          '--cx': `${p.x}px`,
+          '--cy': `${p.y}px`,
+          '--crot': `${p.rot}deg`,
+          '--cbg': p.color,
+          '--csize': `${p.size}px`,
+        }"
+      />
+    </div>
 
-      <div class="cover__stage">
-        <span class="env__shadow" />
-        <div class="env-float">
-          <div class="env">
-            <div class="env__letter">
-              <span class="env__line" />
-              <span class="env__line env__line--2" />
-              <span class="env__line env__line--3" />
-            </div>
-            <div class="env__front" />
-            <div class="env__flap" />
-            <div class="env__seal">
-              <span class="env__seal-emoji">{{ sealEmoji }}</span>
-            </div>
-          </div>
-        </div>
+    <div class="cover__inner">
+      <div class="cover__top-badge">
+        <span class="pulse-sparkle">✨</span>
+        <span>专属心意盲盒已送达</span>
       </div>
 
       <div class="cover__words">
@@ -84,341 +143,338 @@ function onTap() {
         <p class="cover__greet">{{ greetText }}</p>
       </div>
 
-      <button v-if="interactive" type="button" class="cover__hint">
-        <span class="cover__ring" />
-        轻触打开
-      </button>
+      <!-- 3D 悬浮礼盒与解绑丝带 -->
+      <div class="giftbox-stage">
+        <div class="giftbox-float">
+          <div class="giftbox" :class="{ 'is-open': ribbonUntied || opening }">
+            <!-- 盒盖 -->
+            <div class="giftbox__lid">
+              <div class="lid__ribbon-h"></div>
+              <div class="lid__ribbon-v"></div>
+              <div class="lid__bow">
+                <span class="bow-knot">{{ boxEmoji }}</span>
+                <span class="bow-loop bow-loop--left"></span>
+                <span class="bow-loop bow-loop--right"></span>
+              </div>
+            </div>
+
+            <!-- 盒身 -->
+            <div class="giftbox__body">
+              <div class="body__ribbon-h"></div>
+              <div class="body__ribbon-v"></div>
+              <!-- 盒内升起的信与心意卡 -->
+              <div class="giftbox__content">
+                <span class="letter-mini">💌 为你定制的心意</span>
+              </div>
+            </div>
+
+            <div class="giftbox__shadow"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 解绑提示 -->
+      <div v-if="interactive" class="cover__hint">
+        <span class="hint-hand">👆</span>
+        <span>滑动丝带 或 点击拆开礼盒</span>
+      </div>
       <p v-else class="cover__hint cover__hint--flat">
-        <span class="cover__ring" />
-        轻触打开
+        <span>点击拆开礼盒</span>
       </p>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ══ 三套色调 ══════════════════════════════════
-   env-a/b/c 是信封纸的三层色，key 是火漆与强调色，
-   paper 是信纸，全部由 tokens 组合，不出现具体颜色。 */
 .t-dawn {
-  --sh-bg: var(--g-dawn);
-  --sh-key: var(--c-rose);
-  --sh-key-deep: var(--c-rose-deep);
-  --sh-key-soft: var(--c-rose-soft);
-  --sh-env-a: var(--c-rose-tint);
-  --sh-env-b: var(--c-sand-soft);
-  --sh-env-c: var(--c-rose-soft);
-  --sh-paper: var(--c-surface-alt);
-  --sh-glow-a: var(--c-rose-soft);
-  --sh-glow-b: var(--c-sand-soft);
+  --sh-bg: linear-gradient(160deg, #fff1f2 0%, #ffe4e6 50%, #fecdd3 100%);
+  --sh-box-base: #f43f5e;
+  --sh-box-deep: #e11d48;
+  --sh-ribbon: #fbbf24;
+  --sh-ribbon-glow: rgba(251, 191, 36, 0.6);
+  --sh-key: #f43f5e;
 }
 .t-dusk {
-  --sh-bg: var(--g-dusk);
-  --sh-key: var(--c-lilac-deep);
-  --sh-key-deep: var(--c-lilac-deep);
-  --sh-key-soft: var(--c-lilac-soft);
-  --sh-env-a: var(--c-lilac-soft);
-  --sh-env-b: var(--c-rose-tint);
-  --sh-env-c: var(--c-lilac-soft);
-  --sh-paper: var(--c-surface);
-  --sh-glow-a: var(--c-lilac-soft);
-  --sh-glow-b: var(--c-rose-soft);
+  --sh-bg: linear-gradient(160deg, #2e1065 0%, #1e1b4b 50%, #0f172a 100%);
+  --sh-box-base: #7c3aed;
+  --sh-box-deep: #6d28d9;
+  --sh-ribbon: #f472b6;
+  --sh-ribbon-glow: rgba(244, 114, 182, 0.6);
+  --sh-key: #c084fc;
 }
 .t-sage {
-  --sh-bg: linear-gradient(162deg, var(--c-sage-soft) 0%, var(--c-paper) 46%, var(--c-sand-soft) 100%);
-  --sh-key: var(--c-sage-deep);
-  --sh-key-deep: var(--c-sage-deep);
-  --sh-key-soft: var(--c-sage-soft);
-  --sh-env-a: var(--c-sage-soft);
-  --sh-env-b: var(--c-paper-2);
-  --sh-env-c: var(--c-sage-soft);
-  --sh-paper: var(--c-surface-alt);
-  --sh-glow-a: var(--c-sage-soft);
-  --sh-glow-b: var(--c-sand-soft);
+  --sh-bg: linear-gradient(160deg, #ecfdf5 0%, #d1fae5 50%, #a7f3d0 100%);
+  --sh-box-base: #059669;
+  --sh-box-deep: #047857;
+  --sh-ribbon: #fbbf24;
+  --sh-ribbon-glow: rgba(251, 191, 36, 0.6);
+  --sh-key: #059669;
 }
 
-/* ══ 幕 ════════════════════════════════════════ */
 .cover {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 20;
   overflow: hidden;
   background: var(--sh-bg);
-  background-size: 100% 130%;
-  transition: opacity 340ms var(--e-out), transform 340ms var(--e-out);
+  transition: opacity 400ms cubic-bezier(0.16, 1, 0.3, 1), transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .cover.is-static {
   pointer-events: none;
 }
 .cover.is-opening {
   opacity: 0;
-  transform: translateY(-30px);
-  transition-delay: 560ms;
+  transform: translateY(-40px) scale(0.96);
+  transition-delay: 500ms;
 }
 
 .cover__glow {
   position: absolute;
   border-radius: 50%;
-  filter: blur(46px);
+  filter: blur(50px);
   pointer-events: none;
 }
 .cover__glow--a {
-  width: 220px;
-  height: 220px;
+  width: 240px;
+  height: 240px;
   top: -60px;
-  right: -70px;
-  background: var(--sh-glow-a);
-  opacity: 0.75;
+  right: -60px;
+  background: rgba(244, 63, 94, 0.25);
 }
 .cover__glow--b {
-  width: 260px;
-  height: 260px;
-  bottom: -90px;
-  left: -90px;
-  background: var(--sh-glow-b);
-  opacity: 0.6;
+  width: 280px;
+  height: 280px;
+  bottom: -80px;
+  left: -80px;
+  background: rgba(251, 191, 36, 0.25);
 }
 
 .cover__inner {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 60px var(--page-x) 96px;
+  justify-content: space-between;
+  padding: 50px 24px 40px;
   text-align: center;
+  box-sizing: border-box;
 }
 
-.cover__eyebrow {
-  font-size: var(--fs-caption);
-  letter-spacing: var(--ls-wide);
-  color: var(--c-ink-3);
-  transition: opacity 240ms var(--e-out);
-}
-.cover.is-opening .cover__eyebrow {
-  opacity: 0;
-}
-
-/* ══ 信封 ══════════════════════════════════════ */
-.cover__stage {
-  position: relative;
-  margin: 34px 0 32px;
-  display: flex;
+.cover__top-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sh-key);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
-.env__shadow {
-  position: absolute;
-  left: 50%;
-  bottom: -16px;
-  width: 148px;
-  height: 18px;
-  border-radius: 50%;
-  transform: translateX(-50%);
-  background: var(--c-ink);
-  opacity: 0.08;
-  filter: blur(7px);
-  transition: opacity 300ms var(--e-out);
-}
-.cover.is-opening .env__shadow {
-  opacity: 0;
-}
-
-.env-float {
-  animation: floaty 5.6s var(--e-in-out) infinite;
-}
-.cover.is-opening .env-float {
-  animation: none;
-}
-
-.env {
-  position: relative;
-  width: 208px;
-  height: 138px;
-  border-radius: var(--r-sm);
-  background: linear-gradient(158deg, var(--sh-env-a) 0%, var(--sh-env-b) 100%);
-  box-shadow: var(--sh-2);
-  perspective: 620px;
-}
-
-/* 信纸：静止时完全被 front + flap 盖住 */
-.env__letter {
-  position: absolute;
-  left: 15px;
-  right: 15px;
-  top: 13px;
-  bottom: 13px;
-  z-index: 1;
-  padding: 15px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  border-radius: var(--r-xs);
-  background: var(--sh-paper);
-  box-shadow: var(--sh-1);
-  transition: transform 460ms var(--e-out) 240ms;
-}
-.cover.is-opening .env__letter {
-  transform: translateY(-66px) scale(1.03);
-}
-.env__line {
-  height: 4px;
-  width: 84%;
-  border-radius: var(--r-pill);
-  background: var(--c-ink-4);
-  opacity: 0.42;
-}
-.env__line--2 {
-  width: 96%;
-}
-.env__line--3 {
-  width: 56%;
-}
-
-/* 信封正面：中间挖一个 V 口 */
-.env__front {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  clip-path: polygon(0 0, 50% 56%, 100% 0, 100% 100%, 0 100%);
-  background: linear-gradient(178deg, var(--sh-env-b) 0%, var(--sh-env-a) 100%);
-  border-radius: var(--r-sm);
-}
-.env__front::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--c-ink);
-  opacity: 0.035;
-}
-
-/* 封口：绕上边缘翻起 */
-.env__flap {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 56%;
-  z-index: 3;
-  clip-path: polygon(0 0, 100% 0, 50% 100%);
-  background: linear-gradient(180deg, var(--sh-env-c) 0%, var(--sh-env-a) 100%);
-  border-radius: var(--r-sm) var(--r-sm) 0 0;
-  transform-origin: 50% 0%;
-  transform: rotateX(0deg);
-  transition: transform 440ms var(--e-in-out), opacity 260ms linear 300ms;
-}
-.env__flap::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: var(--c-ink);
-  opacity: 0.075;
-}
-.cover.is-opening .env__flap {
-  transform: rotateX(-172deg);
-  opacity: 0;
-}
-
-/* 火漆印 */
-.env__seal {
-  position: absolute;
-  left: 50%;
-  top: 56%;
-  z-index: 4;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle at 34% 28%, var(--sh-key) 0%, var(--sh-key-deep) 100%);
-  box-shadow: var(--sh-1);
-  transition: transform 280ms var(--e-in-out), opacity 240ms linear;
-}
-.env__seal::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  border: 1px solid var(--c-ink-inverse);
-  opacity: 0.36;
-}
-.env__seal-emoji {
-  font-size: 17px;
-  line-height: 1;
-}
-.cover.is-opening .env__seal {
-  transform: translate(-50%, -50%) scale(0.5) rotate(-16deg);
-  opacity: 0;
-}
-
-/* ══ 文字 ══════════════════════════════════════ */
 .cover__words {
-  max-width: 280px;
-  transition: opacity 300ms var(--e-out), transform 300ms var(--e-out);
-}
-.cover.is-opening .cover__words {
-  opacity: 0;
-  transform: translateY(-10px);
+  margin-top: 10px;
+  max-width: 300px;
 }
 .cover__to {
   font-family: var(--f-serif);
-  font-size: var(--fs-h1);
-  font-weight: 500;
-  line-height: 1.3;
-  color: var(--c-ink);
+  font-size: 24px;
+  font-weight: 700;
+  color: #18181b;
 }
 .cover__greet {
-  margin-top: var(--s-3);
-  font-family: var(--f-serif);
-  font-size: var(--fs-body);
-  line-height: var(--lh-loose);
-  color: var(--c-ink-2);
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #52525b;
 }
 
-.cover__hint {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(38px + var(--safe-bottom));
+/* ══ 3D 礼盒舞台 ════════════════════════════ */
+.giftbox-stage {
+  position: relative;
+  width: 180px;
+  height: 180px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--s-2);
-  min-height: 44px;
-  font-family: var(--f-sans);
-  font-size: var(--fs-caption);
-  letter-spacing: var(--ls-wide);
-  color: var(--c-ink-3);
-  transition: opacity 240ms var(--e-out);
+  perspective: 800px;
 }
-.cover__hint--flat {
-  pointer-events: none;
+.giftbox-float {
+  animation: float-box 3.6s ease-in-out infinite;
 }
-.cover__ring {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--sh-key);
-  animation: breathe 2.6s var(--e-in-out) infinite;
-}
-.cover.is-opening .cover__hint {
-  opacity: 0;
+@keyframes float-box {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-12px) rotate(1.5deg); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .env-float,
-  .cover__ring {
-    animation: none;
+.giftbox {
+  position: relative;
+  width: 140px;
+  height: 140px;
+  transform-style: preserve-3d;
+  cursor: pointer;
+}
+
+/* 盒身 */
+.giftbox__body {
+  position: absolute;
+  inset: 20px 0 0 0;
+  background: linear-gradient(135deg, var(--sh-box-base) 0%, var(--sh-box-deep) 100%);
+  border-radius: 12px;
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+}
+.body__ribbon-v {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%);
+  box-shadow: 0 0 10px var(--sh-ribbon-glow);
+}
+.body__ribbon-h {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 24px;
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%);
+  box-shadow: 0 0 10px var(--sh-ribbon-glow);
+}
+
+/* 盒盖 */
+.giftbox__lid {
+  position: absolute;
+  top: 8px;
+  left: -8px;
+  right: -8px;
+  height: 36px;
+  background: linear-gradient(135deg, #fb7185 0%, var(--sh-box-base) 100%);
+  border-radius: 10px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+  z-index: 10;
+  transform-origin: 50% 0%;
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
+}
+.lid__ribbon-v {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 50%, #d97706 100%);
+}
+.lid__bow {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;
+}
+.bow-knot {
+  font-size: 24px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+/* 拆盒状态 */
+.giftbox.is-open .giftbox__lid {
+  transform: translateY(-60px) rotateX(-120deg) scale(1.1);
+  opacity: 0;
+}
+.giftbox__content {
+  position: absolute;
+  inset: 10px;
+  background: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(100%);
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.letter-mini {
+  font-size: 11px;
+  font-weight: 700;
+  color: #f43f5e;
+}
+.giftbox.is-open .giftbox__content {
+  transform: translateY(-20px) scale(1.05);
+}
+
+.giftbox__shadow {
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 110px;
+  height: 16px;
+  background: radial-gradient(ellipse, rgba(0, 0, 0, 0.2) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+/* 提示按钮 */
+.cover__hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 999px;
+  background: #18181b;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  animation: pulse-hint 2s infinite ease-in-out;
+}
+.hint-hand {
+  font-size: 16px;
+  animation: bounce-hand 1.2s infinite alternate ease-in-out;
+}
+@keyframes bounce-hand {
+  from { transform: translateY(0); }
+  to { transform: translateY(-4px); }
+}
+@keyframes pulse-hint {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+
+/* ══ 五彩礼花粒子 ═══════════════════════════ */
+.confetti-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+  z-index: 100;
+}
+.confetti {
+  position: absolute;
+  width: var(--csize);
+  height: var(--csize);
+  background: var(--cbg);
+  border-radius: 2px;
+  animation: explode-confetti 0.8s cubic-bezier(0.12, 0.8, 0.32, 1) forwards;
+}
+@keyframes explode-confetti {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(0.4);
+    opacity: 1;
   }
-  .env__flap,
-  .env__letter,
-  .env__seal {
-    transition-duration: 200ms;
+  100% {
+    transform: translate(var(--cx), var(--cy)) rotate(var(--crot)) scale(1.2);
+    opacity: 0;
   }
 }
 </style>
