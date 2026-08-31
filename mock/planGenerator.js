@@ -236,43 +236,49 @@ const IDEAL_RAW = 150
 
 function scoreGift(gift, ctx, jitter) {
   const avoid = gift.avoid || []
+  const tags = gift.tags || []
+  const traits = gift.traits || []
+  const recipients = gift.recipients || gift.recipient_types || []
+  const occasions = gift.occasions || []
 
   // ── 硬淘汰：命中禁忌 ──
-  for (const t of ctx.taboo) {
+  for (const t of ctx.taboo || []) {
     if (avoid.includes(t)) return null
   }
-  if (ctx.taboo.includes(TABOOS.PRICEY) && gift.priceHigh > 800) return null
-  if (ctx.taboo.includes(TABOOS.FOOD) && gift.tags.includes('甜')) return null
+  if (ctx.taboo?.includes(TABOOS.PRICEY) && (gift.priceHigh || gift.price_max || 0) > 800) return null
+  if (ctx.taboo?.includes(TABOOS.FOOD) && tags.includes('甜')) return null
 
   let raw = 0
 
   // 性格标签
-  if (ctx.personality.length) {
+  if (ctx.personality?.length) {
     let hits = 0
-    for (const p of ctx.personality) if (gift.traits.includes(p)) hits++
+    for (const p of ctx.personality) if (traits.includes(p)) hits++
     raw += Math.min(hits * 24, 60)
     if (hits === 0) raw -= 10
   }
 
   // 收礼对象
   if (ctx.recipient) {
-    if (gift.recipients.includes(ctx.recipient)) raw += 18
-    else if (gift.recipients.includes('*')) raw += 8
-    else raw -= 20
+    if (recipients.some((r) => String(r).includes(ctx.recipient) || ctx.recipient.includes(String(r)))) raw += 18
+    else if (recipients.includes('*') || recipients.length === 0) raw += 8
+    else raw -= 10
   }
 
   // 场合
   if (ctx.occasion) {
-    if (gift.occasions.includes(ctx.occasion)) raw += 14
-    else raw -= 6
+    if (occasions.some((o) => String(o).includes(ctx.occasion) || ctx.occasion.includes(String(o)))) raw += 14
+    else raw -= 4
   }
 
   // 预算
   const lo = ctx.budgetLow
   const hi = ctx.budgetHigh
-  if (gift.priceLow >= lo && gift.priceHigh <= hi) raw += 20
-  else if (gift.priceLow <= hi && gift.priceHigh >= lo) raw += 10
-  else if (gift.priceLow > hi) raw += gift.priceLow > hi * 2 ? -44 : -26
+  const pLow = gift.priceLow || gift.price_min || 0
+  const pHigh = gift.priceHigh || gift.price_max || 9999
+  if (pLow >= lo && pHigh <= hi) raw += 20
+  else if (pLow <= hi && pHigh >= lo) raw += 10
+  else if (pLow > hi) raw += pLow > hi * 2 ? -44 : -26
   else {
     // 明显低于预算：不算越界，但会显得没当回事，差得越远扣得越多
     const gap = clamp((lo - gift.priceHigh) / Math.max(1, lo), 0, 1)

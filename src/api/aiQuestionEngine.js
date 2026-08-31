@@ -2,9 +2,9 @@
  * ══════════════════════════════════════════════════════════════
  *  深度 AI 动态出题引擎 (Deep AI Question Engine)
  *  —— 由顶级私人买手大模型驱动的 4~5 步深度见招拆招追问：
- *     1. 彻底告别浅薄表层提问，顺着回答深入挖掘具体生活场景、主题偏好与心愿；
- *     2. 所有问题均自带「✍️ 其他 / 自定义输入…」选项，用户可随时输入个性化内容；
- *     3. 针对孩子/晚辈、长辈、伴侣等不同受礼人深度细化，不问清细节不轻易推品；
+ *     1. 针对“潮玩公仔/动漫模型/毛绒玩具”深度细化品类与IP偏好，拒绝草率跳过；
+ *     2. 针对“长辈家务/身体舒缓/精神念想”多层次深挖痛点细节；
+ *     3. 所有问题均自带「✍️ 其他 / 自定义输入…」选项，用户可随时输入个性化内容；
  *     4. 纯中文输出，零英文单词，严禁张冠李戴。
  * ══════════════════════════════════════════════════════════════
  */
@@ -21,8 +21,8 @@ export const INITIAL_STEP = {
     '我会像最懂生活的朋友一样，通过几个深入的问题帮你理清头绪。\n\n先告诉我，这次想为谁挑选一份特别的心意？',
   ],
   options: [
-    { value: '父母 / 长辈', label: '父母 / 长辈', emoji: '🏡' },
     { value: '孩子 / 晚辈', label: '孩子 / 晚辈', emoji: '🎈' },
+    { value: '父母 / 长辈', label: '父母 / 长辈', emoji: '🏡' },
     { value: '女朋友 / 妻子', label: '女朋友 / 妻子', emoji: '💗' },
     { value: '男朋友 / 丈夫', label: '男朋友 / 丈夫', emoji: '💙' },
     { value: '闺蜜 / 好友', label: '闺蜜 / 好友', emoji: '🤝' },
@@ -73,7 +73,7 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
   const filledKeys = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== '')
   const answeredCount = filledKeys.length
 
-  // 🌟 深度收集：必须经历 4~5 步深入追问，信息充分后才出方案（或用户点击右上角随时看方案）
+  // 🌟 深度收集：必须经历至少 4~5 步深入追问，信息充分后才出方案（或用户点击右上角随时看方案）
   if (answeredCount >= 5 || stepIndex >= 5) {
     return { isReady: true }
   }
@@ -86,8 +86,8 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
 
 【深度追问指导原则】：
 1. 若送【孩子/晚辈】：
-   - 如果用户提到“安静探索型 / 动手型 / 科学”，下一问必须深挖具体兴趣方向（如科学实验、空间积木、手工绘画、科普绘本）或希望培养的能力；
-   - 绝不要刚问了一个词就草率收尾！
+   - 如果用户提到“潮玩 / 公仔 / 模型 / 动漫 / 玩具”：下一问【必须深入追问具体的品类风格】（例如：是软萌毛绒公仔如Jellycat、潮流艺术盲盒手办如泡泡玛特、还是机甲动漫周边），再深挖其关注的特质（陪伴感/限定感/互动性），【严禁直接跳到预算草草收场】！
+   - 如果用户提到“安静探索型 / 动手型 / 科学”：下一问必须深挖具体兴趣方向（如天文物理实验、空间机械拼搭、绘画手工、科普绘本）；
 2. 若送【父母/长辈】：
    - 深入追问是弯腰清洁地面、一日三餐下厨繁重，还是颈椎腰背酸痛，抑或是想念孩子需要精神陪伴；
 3. 若送【伴侣/朋友】：
@@ -101,7 +101,7 @@ ${JSON.stringify(answers, null, 2)}
 必须输出严格 JSON 格式：
 {
   "question": "深度针对性提问（亲切自然，具有启发性）",
-  "key": "收集字段名（如 child_interest / detail_scenario / memory_wish / budget_form）",
+  "key": "收集字段名（如 child_ip_style / detail_scenario / memory_wish / budget_form）",
   "stage": "discover / preference / story / shape",
   "type": "single 或者 multi 或者 text",
   "options": [
@@ -114,7 +114,7 @@ ${JSON.stringify(answers, null, 2)}
 }`
 
   const userPrompt = `受礼人：${recipient}
-当前步数：第 ${stepIndex + 1} 题（目标共 5 题，请继续深入挖掘）
+当前步数：第 ${stepIndex + 1} 题（目标共 5 题，请继续深入挖掘，不要草率结束）
 最新回答记录：
 ${historyMessages.slice(-6).map((m) => `${m.role}: ${m.text}`).join('\n')}
 
@@ -207,6 +207,7 @@ function sanitizeAiStep(raw, answers, stepIndex) {
 function getAdaptiveFallbackStep(answers, stepIndex) {
   const recipient = answers.recipient || 'TA'
   const rel = classifyRelationship(recipient)
+  const allAnswerText = JSON.stringify(answers)
 
   // ── 孩子/晚辈 专属深度路径 ──
   if (rel === 'junior') {
@@ -218,16 +219,36 @@ function getAdaptiveFallbackStep(answers, stepIndex) {
         type: 'single',
         messages: ['这个礼物是送给多大年龄的孩子？平时 TA 最着迷、最能沉下心玩的是哪一类？'],
         options: [
-          { value: '安静专注型 / 喜欢拼搭、科学探索与阅读', label: '安静探索 / 拼搭与阅读', emoji: '🔬' },
-          { value: '动手创造型 / 喜欢美术手工、画画黏土', label: '动手创造 / 美术与手工', emoji: '🎨' },
-          { value: '活力运动型 / 喜欢户外探险、骑行运动', label: '活力运动 / 户外与探险', emoji: '🏃' },
-          { value: '潮玩动漫型 / 喜欢流行IP、公仔模型收藏', label: '潮玩模型 / 流行IP收藏', emoji: '🤖' },
+          { value: '潮玩动漫型 / 喜欢流行IP、公仔模型手办收藏', label: '潮玩公仔 / 流行IP收藏', emoji: '🧸' },
+          { value: '安静专注型 / 喜欢拼搭积木、科学探索与阅读', label: '安静探索 / 拼搭与阅读', emoji: '🔬' },
+          { value: '动手创造型 / 喜欢美术手工、画画黏土创造', label: '动手创造 / 美术与手工', emoji: '🎨' },
+          { value: '活力运动型 / 喜欢户外探险、骑行与体能运动', label: '活力运动 / 户外与探险', emoji: '🏃' },
         ],
         allowCustom: true,
         placeholder: '也可以直接告诉我孩子的具体年龄和爱好…',
       }
     }
+
     if (stepIndex === 2) {
+      // 🌟 针对“潮玩公仔/模型”深度细化
+      if (/潮玩|公仔|动漫|模型|IP|盲盒|手办|玩偶/.test(allAnswerText)) {
+        return {
+          id: 'child_step_2_ip_style',
+          stage: 'preference',
+          key: 'child_ip_style',
+          type: 'single',
+          messages: ['在潮玩公仔与模型方向上，TA 更偏爱哪种具体风格或类型？孩子平时有没有心心念念的特定形象？'],
+          options: [
+            { value: '毛绒治愈系 / 软萌顶流玩偶（如 Jellycat 趣味公仔/巴塞罗熊）', label: '毛绒治愈 / Jellycat公仔', emoji: '🧸' },
+            { value: '潮流艺术系 / 盲盒手办与潮流模型（如 泡泡玛特 DIMOO/潮玩手办）', label: '潮流盲盒 / 艺术潮玩手办', emoji: '🤖' },
+            { value: '拼装机甲系 / 动手组装可动机甲模型（如 乐高拼搭/高达机甲）', label: '拼装机甲 / 可动模型', emoji: '🧱' },
+            { value: '经典二次元 / 热门动漫IP周边（如 宝可梦/三丽鸥/动漫收藏）', label: '热门动漫 / 经典IP周边', emoji: '🎀' },
+          ],
+          allowCustom: true,
+          placeholder: '可以写写孩子最喜欢的具体形象或心愿…',
+        }
+      }
+
       return {
         id: 'child_step_2_deep_theme',
         stage: 'preference',
@@ -244,7 +265,25 @@ function getAdaptiveFallbackStep(answers, stepIndex) {
         placeholder: '可以写写孩子最近念叨过的具体愿望…',
       }
     }
+
     if (stepIndex === 3) {
+      if (/潮玩|公仔|动漫|模型|IP|盲盒|手办|玩偶/.test(allAnswerText)) {
+        return {
+          id: 'child_step_3_toy_role',
+          stage: 'story',
+          key: 'toy_role',
+          type: 'single',
+          messages: ['在挑选这份公仔/潮玩礼物时，你更看重它带给孩子的哪种体验？'],
+          options: [
+            { value: '日常暖心陪伴 / 手感柔软安全，放在床头书桌每天看着舒服', label: '暖心陪伴 / 床头书桌常驻', emoji: '🛌' },
+            { value: '拆盒惊喜刺激 / 限定款热门稀缺，送出手非常有面子和惊喜', label: '拆盒惊喜 / 热门限定款', emoji: '✨' },
+            { value: '动手探索把玩 / 可以自己拼装互动、摆造型展示', label: '动手互动 / 拼装展示把玩', emoji: '🧩' },
+          ],
+          allowCustom: true,
+          placeholder: '可以补充孩子收到礼物时的期待…',
+        }
+      }
+
       return {
         id: 'child_step_3_feeling',
         stage: 'story',
@@ -254,21 +293,22 @@ function getAdaptiveFallbackStep(answers, stepIndex) {
         options: [
           { value: '兴奋欢呼，迫不及待马上拆开动手玩起来', label: '兴奋欢呼，立马玩起来', emoji: '🎉' },
           { value: '爱不释手，能长久陪伴、反复探索不厌烦', label: '爱不释手，长久陪伴', emoji: '⭐' },
-          { value: '感到被重视和鼓励，建立自信与成就感', label: '受到鼓励，收获成就感', emoji: '🏆' },
+          { value: '受到鼓励，在探索中建立自信与成就感', label: '受到鼓励，收获成就感', emoji: '🏆' },
         ],
         allowCustom: true,
       }
     }
+
     return {
       id: 'child_step_4_budget',
       stage: 'shape',
       key: 'budget',
       type: 'single',
-      messages: ['最后确认一下预算与形式偏好，我来从官方正品库中为你精挑细选：'],
+      messages: ['最后确认一下预算区间与规格偏好，我来从官方正品库中为你精挑细选：'],
       options: [
-        { value: '¥100–300 轻巧心意益智好物', label: '¥100–300 精巧心意款', emoji: '🌱' },
-        { value: '¥300–600 品质进阶大套组', label: '¥300–600 品质大套组', emoji: '✨' },
-        { value: '¥600–1200 标杆重磅成长大礼', label: '¥600–1200 标杆成长礼', emoji: '👑' },
+        { value: '¥100–300 轻巧心意正品周边', label: '¥100–300 精巧心意款', emoji: '🌱' },
+        { value: '¥300–600 品质热门进阶套组', label: '¥300–600 热门大套组', emoji: '✨' },
+        { value: '¥600–1200 标杆重磅典藏大礼', label: '¥600–1200 标杆典藏礼', emoji: '👑' },
       ],
       allowCustom: true,
     }
@@ -396,10 +436,10 @@ function getDefaultDeepOptions(recipient, stepIndex) {
   const rel = classifyRelationship(recipient)
   if (rel === 'junior') {
     return [
+      { value: '毛绒公仔 / 治愈玩偶', label: '毛绒公仔 / 治愈玩偶', emoji: '🧸' },
+      { value: '潮流手办 / 盲盒模型', label: '潮流手办 / 盲盒模型', emoji: '🤖' },
       { value: '科学探索 / 益智拼搭', label: '科学探索 / 益智拼搭', emoji: '🔬' },
       { value: '艺术手工 / 美育启蒙', label: '艺术手工 / 美育启蒙', emoji: '🎨' },
-      { value: '户外运动 / 活力探险', label: '户外运动 / 活力探险', emoji: '🏃' },
-      { value: '潮玩模型 / 流行好物', label: '潮玩模型 / 流行好物', emoji: '🤖' },
     ]
   }
   if (rel === 'elder') {
