@@ -301,6 +301,12 @@ async function confirmReplace() {
 /* ── 信：换语气 ───────────────────────────── */
 const letterLoading = ref(false)
 
+function onUpdateLetter(newLetter) {
+  if (newLetter && typeof newLetter === 'object') {
+    planStore.replaceCurrent({ letter: newLetter })
+  }
+}
+
 async function onChangeTone(tone) {
   if (letterLoading.value || !plan.value) return
   letterLoading.value = true
@@ -612,7 +618,7 @@ onUnmounted(() => {
             </div>
           </div>
           <p class="section-label">替你写的信</p>
-          <LetterCard :letter="letter || {}" :loading="letterLoading" @change-tone="onChangeTone" />
+          <LetterCard :letter="letter || {}" :loading="letterLoading" @change-tone="onChangeTone" @update-letter="onUpdateLetter" />
         </section>
 
         <!-- 仪式 -->

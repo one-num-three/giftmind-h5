@@ -50,14 +50,31 @@ export async function generateSummary(answers) {
   }
 }
 
+import { generateCustomStyleLetter, callMiMo } from './mimoService'
+
 export async function chatOnce({ messages }) {
-  await delay(700)
   const last = messages?.[messages.length - 1]?.content || ''
+  try {
+    const reply = await callMiMo([
+      { role: 'system', content: '你是资深高情商礼物顾问 GiftMind。请亲切、懂行地回答用户的追问或建议（60字以内）。' },
+      { role: 'user', content: last }
+    ], { temperature: 0.7, timeout: 5000 })
+    if (reply) return reply
+  } catch (e) {
+    console.warn('MiMo chatOnce fallback:', e)
+  }
   return `我记下了：「${last.slice(0, 30)}${last.length > 30 ? '…' : ''}」，这会体现在方案里。`
 }
 
 export async function regenerateLetter(plan, { tone, answers } = {}) {
-  await delay(900)
+  try {
+    const custom = await generateCustomStyleLetter(tone, plan)
+    if (custom && custom.paragraphs?.length) {
+      return { letter: custom }
+    }
+  } catch (e) {
+    console.warn('MiMo regenerateLetter fallback:', e)
+  }
   return generateLetter(plan?.answers || answers || {}, tone)
 }
 

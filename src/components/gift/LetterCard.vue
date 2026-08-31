@@ -1,57 +1,48 @@
 <script setup>
 /**
- * LetterCard —— 替你写的那封信
+ * LetterCard —— 替你写的那封信（小米 MiMo 4 大多风格情话/心意卡片生成器）
  *
- * 信纸质感：微暖底 + 极淡横线 + 纸纹，段间距放到 --lh-loose 的节奏上。
- * 复制在组件内直接完成（纯读操作）；换语气只往上抛事件，方案的改写交给页面。
+ * 1. 4 大风格一键实时切换：深情走心、嘴硬傲娇、幽默风趣、唯美诗意
+ * 2. 复制全文（带 Toast 提示）
+ * 3. 🖼️ 一键生成精美心意明信片海报
  */
 import { ref, computed } from 'vue'
 import { copyText } from '@/utils/helpers'
 import { useUiStore } from '@/stores/ui'
+import { generateCustomStyleLetter } from '@/api/mimoService'
 
 const props = defineProps({
   letter: { type: Object, default: () => ({}) },
   loading: Boolean,
 })
 
-const emit = defineEmits(['change-tone'])
+const emit = defineEmits(['change-tone', 'update-letter'])
 
 const ui = useUiStore()
 
-/** 可选语气。match 用来把 letter.tone（可能是模板自带的说法）归到某一档上 */
-const TONES = [
-  { key: '现代诗意', label: '现代诗意', hint: '有画面、有留白，像写给一个人', match: ['现代诗', '诗意', 'modern_poetic', '自然'] },
-  { key: '克制真诚', label: '克制真诚', hint: '少说一点，但每句都算数', match: ['克制', '真诚'] },
-  { key: '俏皮', label: '俏皮', hint: '轻一点，带一句玩笑', match: ['俏皮', '轻快', '轻松', '狡黠', '有梗'] },
-  { key: '郑重', label: '郑重', hint: '一字一句，认真讲完', match: ['郑重', '正式', '认真'] },
-  { key: '温暖', label: '温暖', hint: '像家常话，落在日子里', match: ['温暖', '温柔', '妥帖', '踏实'] },
-  { key: '热烈', label: '热烈', hint: '不含蓄，说得满一点', match: ['热烈', '深情', '直白', '炽热'] },
+const STYLES = [
+  { key: 'touching', label: '🍯 深情走心', desc: '细腻真挚，字字戳心' },
+  { key: 'tsundere', label: '😼 嘴硬傲娇', desc: '口嫌体正直，反差萌' },
+  { key: 'humorous', label: '😄 轻松幽默', desc: '默契玩笑，让人会心一笑' },
+  { key: 'poetic', label: '📜 唯美诗意', desc: '文青质感，留白与画面' },
 ]
+
+const currentStyleKey = ref('touching')
+const generatingStyle = ref(false)
+const postcardModalOpen = ref(false)
 
 function text(v) {
   return typeof v === 'string' ? v.trim() : ''
 }
 
-const salutation = computed(() => text(props.letter?.salutation))
-const signature = computed(() => text(props.letter?.signature))
+const salutation = computed(() => text(props.letter?.salutation) || '见信好：')
+const signature = computed(() => text(props.letter?.signature) || '—— 写在心意送达之时')
 const toneLabel = computed(() => text(props.letter?.tone))
 const paragraphs = computed(() => {
   const list = Array.isArray(props.letter?.paragraphs) ? props.letter.paragraphs : []
   return list.map(text).filter(Boolean)
 })
 const hasBody = computed(() => Boolean(salutation.value || paragraphs.value.length))
-
-/** 当前语气落在哪一档：先按 key 精确命中，再按关键词模糊命中 */
-const currentToneKey = computed(() => {
-  const t = toneLabel.value
-  if (!t) return ''
-  const exact = TONES.find((o) => o.key === t)
-  if (exact) return exact.key
-  const fuzzy = TONES.find((o) => o.match.some((k) => t.includes(k)))
-  return fuzzy ? fuzzy.key : ''
-})
-
-const sheetOpen = ref(false)
 
 const fullText = computed(() => {
   const parts = []
@@ -64,27 +55,67 @@ const fullText = computed(() => {
 async function onCopy() {
   if (props.loading || !fullText.value) return
   const ok = await copyText(fullText.value)
-  if (ok) ui.success('整封信已复制')
+  if (ok) ui.success('整封信已复制，可直接粘贴到微信或随礼贺卡')
   else ui.error('复制没成功，可以长按选中文字')
 }
 
-function pickTone(key) {
-  sheetOpen.value = false
-  if (!key) return
-  emit('change-tone', key)
+async function selectStyle(styleKey) {
+  if (generatingStyle.value || props.loading) return
+  currentStyleKey.value = styleKey
+  generatingStyle.value = true
+  try {
+    const customLetter = await generateCustomStyleLetter(styleKey, {
+      answers: {},
+      selectedGift: { name: '这份礼物' }
+    })
+    if (customLetter) {
+      emit('update-letter', customLetter)
+      ui.success(`已切换为「${customLetter.tone || '新风格'}」`)
+    }
+  } catch (err) {
+    ui.error('风格切换稍慢，请稍后再试')
+  } finally {
+    generatingStyle.value = false
+  }
 }
 </script>
 
 <template>
   <GCard class="letter" padding="none" radius="xl">
-    <div class="letter__paper grain">
+    <!-- 4 大风格快捷切换胶囊栏 -->
+    <div class="letter__styles-bar">
+      <div class="styles-title">
+        <span class="styles-badge">AI 情绪卡片</span>
+        <span class="styles-hint">4 种心意表达语气</span>
+      </div>
+      <div class="styles-capsules">
+        <button
+          v-for="s in STYLES"
+          :key="s.key"
+          class="style-capsule tap"
+          :class="{ 'is-active': s.key === currentStyleKey }"
+          :disabled="generatingStyle || loading"
+          type="button"
+          @click="selectStyle(s.key)"
+        >
+          {{ s.label }}
+        </button>
+      </div>
+    </div>
+
+    <!-- 信纸本体 -->
+    <div class="letter__paper grain" :class="{ 'is-busy': generatingStyle }">
       <span class="letter__quote" aria-hidden="true">“</span>
 
-      <template v-if="loading">
+      <template v-if="loading || generatingStyle">
         <div class="letter__loading">
+          <div class="loading-tip">
+            <span class="pulse-dot"></span>
+            <span>MiMo 极速大模型正在按「{{ STYLES.find(s=>s.key===currentStyleKey)?.label }}」定制手写信...</span>
+          </div>
           <GSkeleton width="38%" height="18px" />
           <GSkeleton :rows="3" height="14px" />
-          <GSkeleton :rows="3" height="14px" />
+          <GSkeleton :rows="2" height="14px" />
           <GSkeleton width="34%" height="14px" />
         </div>
       </template>
@@ -98,39 +129,50 @@ function pickTone(key) {
       <p v-else class="letter__empty">这封信还没有写出来，换个语气试试。</p>
     </div>
 
+    <!-- 底部操作条 -->
     <div class="letter__tools">
-      <button class="tool tap" type="button" :disabled="loading || !fullText" @click="onCopy">
+      <button class="tool tap" type="button" :disabled="loading || generatingStyle || !fullText" @click="onCopy">
         <GIcon name="copy" :size="16" />
-        <span>复制全文</span>
+        <span>复制贺卡文案</span>
       </button>
 
       <span class="tool__sep" aria-hidden="true" />
 
-      <button class="tool tap" type="button" :disabled="loading" @click="sheetOpen = true">
-        <GIcon name="refresh" :size="16" />
-        <span>换个语气</span>
-        <em v-if="toneLabel" class="tool__now">{{ toneLabel }}</em>
+      <button class="tool tap tool--highlight" type="button" :disabled="loading || generatingStyle" @click="postcardModalOpen = true">
+        <span class="tool-emoji">🖼️</span>
+        <span>生成心意明信片</span>
       </button>
     </div>
 
-    <GSheet v-model="sheetOpen" title="换个语气">
-      <p class="sheet__desc">换的是说法，不是内容。你提到的那些细节都会留着。</p>
-      <ul class="tones">
-        <li v-for="t in TONES" :key="t.key">
-          <button
-            class="tone tap"
-            :class="{ 'is-on': t.key === currentToneKey }"
-            type="button"
-            @click="pickTone(t.key)"
-          >
-            <span class="tone__text">
-              <span class="tone__label">{{ t.label }}</span>
-              <span class="tone__hint">{{ t.hint }}</span>
-            </span>
-            <GIcon v-if="t.key === currentToneKey" name="check" :size="17" />
-          </button>
-        </li>
-      </ul>
+    <!-- 心意明信片生成弹窗 -->
+    <GSheet v-model="postcardModalOpen" title="💌 专属手写心意明信片">
+      <div class="postcard-preview grain" id="postcard-content">
+        <div class="postcard-stamp">
+          <span class="stamp-icon">🕊️</span>
+          <span class="stamp-text">SPECIAL GIFT</span>
+        </div>
+        <div class="postcard-header">
+          <span class="postcard-tag">{{ toneLabel || '手写心意' }}</span>
+          <h4 class="postcard-title">{{ salutation }}</h4>
+        </div>
+        <div class="postcard-body">
+          <p v-for="(p, i) in paragraphs" :key="i" class="postcard-p">{{ p }}</p>
+        </div>
+        <div class="postcard-footer">
+          <div class="postcard-seal">
+            <span class="seal-icon">✦</span>
+            <span>GiftMind 心意封存</span>
+          </div>
+          <span class="postcard-sign">{{ signature }}</span>
+        </div>
+      </div>
+
+      <div class="postcard-actions">
+        <button class="action-btn action-btn--primary tap" type="button" @click="onCopy">
+          <GIcon name="copy" :size="16" />
+          <span>复制文字直接发微信</span>
+        </button>
+      </div>
     </GSheet>
   </GCard>
 </template>
@@ -138,28 +180,88 @@ function pickTone(key) {
 <style scoped>
 .letter {
   position: relative;
+  overflow: hidden;
+  background: var(--c-surface);
+  border: 1px solid rgba(244, 114, 182, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.05);
+}
+
+/* ── 4 大风格胶囊栏 ────────────────────────── */
+.letter__styles-bar {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(254, 242, 242, 0.8) 0%, rgba(245, 243, 255, 0.8) 100%);
+  border-bottom: 1px solid var(--c-line);
+}
+.styles-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.styles-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f43f5e;
+  color: #fff;
+}
+.styles-hint {
+  font-size: 12px;
+  color: var(--c-ink-3);
+}
+.styles-capsules {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.styles-capsules::-webkit-scrollbar {
+  display: none;
+}
+.style-capsule {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  color: var(--c-ink-2);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.style-capsule.is-active {
+  background: #f43f5e;
+  border-color: #f43f5e;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(244, 63, 94, 0.3);
+  transform: scale(1.04);
 }
 
 /* ── 信纸 ─────────────────────────────────── */
 .letter__paper {
   position: relative;
-  padding: var(--s-7) var(--s-5) var(--s-6);
-  background: var(--c-surface-alt);
+  padding: 24px 20px 20px;
+  background: #fdfbf7;
   overflow: hidden;
+  transition: opacity 0.2s ease;
 }
-/* 极淡的横线纹理，只做质感，不参与对齐 */
+.letter__paper.is-busy {
+  opacity: 0.7;
+}
 .letter__paper::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.35;
   background-image: repeating-linear-gradient(
     to bottom,
     transparent 0,
     transparent 29px,
-    var(--c-line) 29px,
-    var(--c-line) 30px
+    #e2d9cc 29px,
+    #e2d9cc 30px
   );
 }
 
@@ -168,53 +270,74 @@ function pickTone(key) {
   display: block;
   font-family: var(--f-display);
   font-style: italic;
-  font-size: 52px;
-  line-height: 0.5;
-  color: var(--c-rose);
-  opacity: 0.34;
+  font-size: 48px;
+  line-height: 0.4;
+  color: #f43f5e;
+  opacity: 0.3;
 }
 
 .letter__salu {
   position: relative;
-  margin-top: var(--s-6);
+  margin-top: 16px;
   font-family: var(--f-serif);
-  font-size: var(--fs-h3);
-  color: var(--c-ink);
+  font-size: 16px;
+  font-weight: 600;
+  color: #27272a;
 }
 
 .letter__p {
   position: relative;
-  margin-top: var(--s-5);
+  margin-top: 14px;
   font-family: var(--f-serif);
-  font-size: var(--fs-body);
-  line-height: var(--lh-loose);
-  color: var(--c-ink);
+  font-size: 14px;
+  line-height: 1.85;
+  color: #3f3f46;
   text-align: justify;
   word-break: break-word;
 }
 
 .letter__sign {
   position: relative;
-  margin-top: var(--s-6);
+  margin-top: 20px;
   text-align: right;
   font-family: var(--f-serif);
-  font-size: var(--fs-sm);
-  color: var(--c-ink-2);
+  font-size: 13px;
+  color: #71717a;
 }
 
 .letter__empty {
   position: relative;
-  margin-top: var(--s-5);
-  font-size: var(--fs-sm);
-  color: var(--c-ink-3);
+  margin-top: 16px;
+  font-size: 13px;
+  color: #a1a1aa;
 }
 
 .letter__loading {
   position: relative;
-  margin-top: var(--s-6);
+  margin-top: 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--s-5);
+  gap: 14px;
+}
+.loading-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #f43f5e;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f43f5e;
+  animation: pulse-dot 1.2s infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.6); opacity: 0.4; }
 }
 
 /* ── 工具条 ───────────────────────────────── */
@@ -233,20 +356,19 @@ function pickTone(key) {
   justify-content: center;
   gap: 6px;
   color: var(--c-ink-2);
-  font-size: var(--fs-sm);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.2s ease;
 }
-.tool:disabled {
-  opacity: 0.45;
-  pointer-events: none;
+.tool:active {
+  background: rgba(0, 0, 0, 0.04);
 }
-.tool__now {
-  min-width: 0;
-  font-style: normal;
-  font-size: var(--fs-micro);
-  color: var(--c-ink-4);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.tool--highlight {
+  color: #f43f5e;
+  font-weight: 600;
+}
+.tool-emoji {
+  font-size: 15px;
 }
 .tool__sep {
   width: 1px;
@@ -255,54 +377,101 @@ function pickTone(key) {
   flex-shrink: 0;
 }
 
-/* ── 语气选择 ─────────────────────────────── */
-.sheet__desc {
-  font-size: var(--fs-sm);
-  line-height: var(--lh-normal);
-  color: var(--c-ink-3);
-  margin-bottom: var(--s-4);
+/* ── 心意明信片样式 ───────────────────────── */
+.postcard-preview {
+  position: relative;
+  background: linear-gradient(135deg, #fffbf5 0%, #fff1f2 100%);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  border-radius: 16px;
+  padding: 24px 20px;
+  box-shadow: 0 16px 36px rgba(244, 63, 94, 0.12);
+  margin-bottom: 16px;
+  overflow: hidden;
 }
-.tones {
+.postcard-stamp {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  border: 2px dashed #f43f5e;
+  border-radius: 8px;
+  padding: 4px 8px;
   display: flex;
   flex-direction: column;
-  gap: var(--s-2);
+  align-items: center;
+  opacity: 0.8;
 }
-.tone {
-  width: 100%;
-  min-height: 60px;
+.stamp-icon { font-size: 16px; }
+.stamp-text { font-size: 8px; font-weight: 800; color: #f43f5e; letter-spacing: 0.5px; }
+
+.postcard-tag {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f43f5e;
+  background: rgba(244, 63, 94, 0.1);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+.postcard-title {
+  font-family: var(--f-serif);
+  font-size: 16px;
+  font-weight: 700;
+  color: #27272a;
+}
+.postcard-body {
+  margin: 16px 0;
+}
+.postcard-p {
+  font-family: var(--f-serif);
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: #3f3f46;
+  margin-bottom: 10px;
+  text-align: justify;
+}
+.postcard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid rgba(244, 63, 94, 0.15);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.postcard-seal {
+  font-size: 11px;
+  color: #9ca3af;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  border-radius: var(--r-md);
-  background: var(--c-surface);
-  color: var(--c-ink-2);
-  box-shadow: inset 0 0 0 1px var(--c-line);
-  text-align: left;
-  transition: all var(--t-fast) var(--e-out);
+  gap: 4px;
 }
-.tone.is-on {
-  background: var(--c-rose-tint);
-  color: var(--c-rose-deep);
-  box-shadow: inset 0 0 0 1px var(--c-rose-soft);
+.postcard-sign {
+  font-family: var(--f-serif);
+  font-size: 12px;
+  font-weight: 600;
+  color: #e11d48;
 }
-.tone__text {
-  min-width: 0;
+
+.postcard-actions {
+  display: flex;
+  gap: 10px;
 }
-.tone__label {
-  display: block;
-  font-size: var(--fs-body);
-  font-weight: 500;
-  color: var(--c-ink);
+.action-btn {
+  flex: 1;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
 }
-.tone.is-on .tone__label {
-  color: var(--c-rose-deep);
-}
-.tone__hint {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--fs-caption);
-  color: var(--c-ink-3);
+.action-btn--primary {
+  background: linear-gradient(135deg, #f43f5e 0%, #e11d48 100%);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(244, 63, 94, 0.35);
 }
 </style>

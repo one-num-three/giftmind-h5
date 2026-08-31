@@ -18,19 +18,20 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
+import { getLiveReaction } from '@/api/mimoService'
 
 /** 一条气泡出现前的「正在输入」时长区间 */
-const TYPING_MIN = 600
-const TYPING_MAX = 900
+const TYPING_MIN = 500
+const TYPING_MAX = 800
 /** 同一 step 内两条气泡之间的间隔 */
 const BUBBLE_GAP = 300
 /** 用户作答后到下一题开口 */
-const AFTER_ANSWER = 500
+const AFTER_ANSWER = 350
 /** 收尾语说完到跳转 */
 const FINISH_HOLD = 900
 
 const DONE_TAG = '__done__'
-const FINISH_TEXT = '我已经完全听明白了，给我几秒钟。'
+const FINISH_TEXT = '我已经完全听明白了，正在为您定制最具质感的送礼方案。'
 
 export function useChatFlow() {
   const session = useSessionStore()
@@ -80,9 +81,9 @@ export function useChatFlow() {
     return run === seq && !disposed
   }
 
-  /** 文案越长，"打字"越久，但始终落在 600–900ms 之间 */
+  /** 文案越长，"打字"越久，但始终落在 500–800ms 之间 */
   function typingDuration(text) {
-    return Math.min(TYPING_MAX, TYPING_MIN + String(text || '').length * 10)
+    return Math.min(TYPING_MAX, TYPING_MIN + String(text || '').length * 8)
   }
 
   /**
@@ -135,9 +136,27 @@ export function useChatFlow() {
   }
 
   /* ── 推进到下一题 ─────────────────────────────── */
-  async function advance() {
+  async function advance(lastAnsweredStep = null, lastAnswerValue = null) {
     const run = newRun()
     await delay(AFTER_ANSWER)
+    if (!alive(run)) return
+
+    // 🌟 痛点 1：实时 AI 懂行接话与情绪共鸣（Live Reaction）
+    if (lastAnsweredStep) {
+      typing.value = true
+      try {
+        const reaction = await getLiveReaction(lastAnsweredStep, lastAnswerValue, session.answers)
+        if (alive(run) && reaction) {
+          typing.value = false
+          session.pushMessage({ role: 'ai', text: reaction, stepId: `${lastAnsweredStep.id}_reaction` })
+          await delay(BUBBLE_GAP + 200)
+        }
+      } catch (err) {
+        console.warn('Reaction error:', err)
+      } finally {
+        typing.value = false
+      }
+    }
     if (!alive(run)) return
 
     if (session.isFinished) {
@@ -161,7 +180,7 @@ export function useChatFlow() {
     if (!isCurrent(step)) return
     cancel()
     session.answer(step, value, displayOf(step, value))
-    advance()
+    advance(step, value)
   }
 
   /** 跳过当前题 */
@@ -169,7 +188,7 @@ export function useChatFlow() {
     if (!isCurrent(step)) return
     cancel()
     session.skip(step)
-    advance()
+    advance(step, '')
   }
 
   /**
