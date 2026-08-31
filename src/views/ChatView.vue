@@ -66,6 +66,7 @@ const bubbles = computed(() =>
       muted: Boolean(m.muted),
       avatar: role === 'ai' && lead, // 连发的 AI 消息只有第一条露头像
       spaced: lead && i > 0,
+      streaming: Boolean(m.streaming),
     }
   }),
 )
@@ -107,14 +108,17 @@ function onCustom(base) {
   customBase.value = Array.isArray(base) ? [...base] : []
   customMode.value = true
 }
-function onComposerSubmit(value) {
-  const s = step.value
-  if (!s) return
-  // 多选题的答案始终保持数组形态：自己说的这句和已选项合并
-  const merged =
-    s.type === 'multi' ? [...customBase.value.filter((v) => v !== value), value] : value
+function onComposerSubmit(text) {
+  if (customMode.value && step.value?.type === 'multi') {
+    const combined = [...customBase.value, text]
+    customMode.value = false
+    customBase.value = []
+    onSubmit(combined)
+    return
+  }
   customMode.value = false
-  submit(s, merged)
+  customBase.value = []
+  onSubmit(text)
 }
 
 /** 键盘弹起后把输入区顶到可见位置 */
@@ -126,19 +130,15 @@ function onComposerFocus() {
 }
 
 /* ── 顶部返回 ─────────────────────────────────── */
-/** 回到上一题时用来回填选中态，等 step 变化的 watch 接手 */
-let seed = null
 
 function onBack() {
-  if (customMode.value) {
-    customMode.value = false
-    return
-  }
   if (atStart.value) {
     exitOpen.value = true
-    return
+  } else {
+    const old = goBack()
+    customBase.value = Array.isArray(old) ? [...old] : []
+    customMode.value = false
   }
-  seed = goBack()
 }
 
 function confirmExit() {
@@ -148,13 +148,11 @@ function confirmExit() {
   else router.replace('/')
 }
 
-/* ── 换题时收起自由输入；返回上一题则把旧答案填回去 ── */
+/* ── 换题时收起自由输入 ── */
 watch(
   () => step.value?.id,
   () => {
     customMode.value = false
-    customBase.value = seed || []
-    seed = null
   },
 )
 
@@ -163,11 +161,16 @@ function onViewportResize() {
   nextTick(() => scrollToBottom(false))
 }
 
-onMounted(() => {
+onMounted(async () => {
   nextTick(() => scrollToBottom(false))
   window.visualViewport?.addEventListener('resize', onViewportResize)
-  // 非阻塞：只决定 mic 按钮是否出现，失败不影响聊天
-  planStore.refreshServiceStatus().catch(() => {})
+  if (!isMock) {
+    try {
+      await planStore.checkServiceStatus()
+    } catch {
+      // 检查失败就保持默认
+    }
+  }
 })
 onUnmounted(() => {
   window.visualViewport?.removeEventListener('resize', onViewportResize)
@@ -212,6 +215,7 @@ onUnmounted(() => {
           :avatar="b.avatar"
           :spaced="b.spaced"
           :muted="b.muted"
+          :streaming="b.streaming"
         />
         <ChatBubble
           v-if="typing"

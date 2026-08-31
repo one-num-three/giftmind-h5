@@ -3,8 +3,7 @@
  * 一条对话气泡
  * AI 左（白底细描边 · 左下角收口 · 中文情绪用衬线）
  * 用户右（墨色底 · 右下角收口）
- * 连续多条 AI 消息只有第一条带头像，后面用等宽占位保持对齐。
- * 默认插槽可以塞任意内容（打字指示器就是这么复用气泡外壳的）。
+ * 现已支持逐字流式打印（streaming）与闪烁光标
  */
 defineProps({
   role: { type: String, default: 'ai' }, // ai | user
@@ -13,6 +12,7 @@ defineProps({
   spaced: Boolean, // 与上一条换了说话人，多留一点气口
   muted: Boolean, // 「跳过」这类弱化气泡
   tight: Boolean, // 紧凑内边距
+  streaming: Boolean, // 是否正在逐字流式打字中
 })
 </script>
 
@@ -22,8 +22,9 @@ defineProps({
       <GIcon name="sparkle" :size="13" :stroke="1.8" />
     </div>
 
-    <div class="bubble" :class="{ muted, tight }">
+    <div class="bubble" :class="{ muted, tight, 'is-streaming': streaming }">
       <slot>{{ text }}</slot>
+      <span v-if="streaming" class="typing-cursor" aria-hidden="true"></span>
     </div>
   </div>
 </template>
@@ -62,45 +63,52 @@ defineProps({
 
 /* ── 气泡本体 ─────────────────────────────── */
 .bubble {
-  max-width: 268px;
-  padding: 11px 14px;
+  max-width: var(--bubble-max);
+  padding: 10px 14px;
   font-size: var(--fs-body);
-  line-height: var(--lh-normal);
-  white-space: pre-wrap;
+  line-height: var(--lh-body);
   word-break: break-word;
+  white-space: pre-wrap;
+  position: relative;
+}
+
+.bubble-row.is-ai .bubble {
+  background: var(--c-paper);
+  color: var(--c-ink);
+  border: 1px solid var(--c-border);
+  border-radius: 16px 16px 16px 4px;
   box-shadow: var(--sh-1);
 }
-.bubble.tight {
-  padding: 10px 14px;
-}
 
-.is-ai .bubble {
-  background: var(--c-surface);
-  color: var(--c-ink);
-  border: 1px solid var(--c-line);
-  border-radius: var(--r-lg) var(--r-lg) var(--r-lg) var(--r-xs);
-  font-family: var(--f-serif);
-  font-weight: 400;
-}
-
-.is-user .bubble {
+.bubble-row.is-user .bubble {
   background: var(--c-ink);
-  color: var(--c-ink-inverse);
-  border: 1px solid transparent;
-  border-radius: var(--r-lg) var(--r-lg) var(--r-xs) var(--r-lg);
-  font-family: var(--f-sans);
-  font-size: var(--fs-sm);
-  line-height: var(--lh-snug);
-  padding: 11px 15px;
+  color: var(--c-paper);
+  border-radius: 16px 16px 4px 16px;
+  box-shadow: var(--sh-1);
 }
 
-/* 跳过 / 弱化 */
-.is-user .bubble.muted {
-  background: transparent;
-  color: var(--c-ink-3);
-  border: 1px dashed var(--c-line-strong);
-  box-shadow: none;
-  font-size: var(--fs-caption);
-  padding: 8px 13px;
+.bubble.muted {
+  opacity: 0.6;
+  font-style: italic;
+}
+.bubble.tight {
+  padding: 8px 12px;
+}
+
+/* ── 逐字流式打字机光标 ───────────────────── */
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  margin-left: 3px;
+  background: #f43f5e;
+  vertical-align: -2px;
+  border-radius: 1px;
+  animation: cursor-blink 0.7s infinite ease-in-out;
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; transform: scaleY(1); }
+  50% { opacity: 0; transform: scaleY(0.6); }
 }
 </style>
