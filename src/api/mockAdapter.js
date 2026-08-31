@@ -13,6 +13,8 @@ import {
   updateLocalShare,
 } from './localShareStore'
 
+import { generateCustomStyleLetter, callMiMo, generateAiPlan } from './mimoService'
+
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export async function generatePlan(answers, { onProgress, signal } = {}) {
@@ -26,6 +28,18 @@ export async function generatePlan(answers, { onProgress, signal } = {}) {
   } else {
     await delay(1200)
   }
+
+  // 1. 优先调用真实的 AI 礼物策划大脑（精准解决“父母重复劳动”等真实痛点，绝不推错位品）
+  try {
+    const aiPlan = await generateAiPlan(answers)
+    if (aiPlan && aiPlan.gifts?.length) {
+      return aiPlan
+    }
+  } catch (err) {
+    console.warn('[AI Plan Fallback to mock rule]:', err)
+  }
+
+  // 2. 离线/断网备用方案
   return generateMockPlan(answers)
 }
 
@@ -49,8 +63,6 @@ export async function generateSummary(answers) {
     summary: composeSummaryBlocks(answers),
   }
 }
-
-import { generateCustomStyleLetter, callMiMo } from './mimoService'
 
 export async function chatOnce({ messages }) {
   const last = messages?.[messages.length - 1]?.content || ''

@@ -1,30 +1,28 @@
 /**
  * ══════════════════════════════════════════════════════════════
  *  本地挑礼专家知识库与正则匹配引擎 (Local Expert Knowledge Base)
- *  —— 当 Xiaomi MiMo 大模型断网/超时时，作为底层坚固兜底：
+ *  —— 仅当大模型离线/断网时作为底层保底：
  *     1. 22 套高覆盖率正则关键词匹配规则；
- *     2. 针对人伦身份（长辈/伴侣/同事/朋友/晚辈）精准分流；
- *     3. 提供毫秒级的高情商懂行即时点评（Live Reaction）；
- *     4. 顺畅衔接下一道结构化问题与量身定制的选项。
+ *     2. 严格杜绝重复输出（带全局会话去重机制）；
+ *     3. 针对人伦身份（长辈/伴侣/同事/朋友/晚辈）精准分流。
  * ══════════════════════════════════════════════════════════════
  */
 
 export const LOCAL_KNOWLEDGE_RULES = [
-  /* ── 1. 父母长辈专区 ────────────────────────────── */
+  /* ── 1. 父母长辈·辛苦家务与健康痛点 ────────────── */
   {
-    id: 'elder_parent_general',
+    id: 'elder_labor_tired',
     category: 'elder',
-    pattern: /爸|妈|母|父|长辈|老两口|公公|婆婆|爷爷|奶奶|外公|外婆|姥姥|姥爷/,
-    reaction: '送长辈最重在“体贴入微与真实有用”，不买华而不实的噱头，挑能真正融进他们日常生活的好物。',
-    nextQuestion: '这次给长辈选礼，主要是什么场合或由头呢？',
-    targetKey: 'occasion',
-    stage: 'discover',
+    pattern: /重复|累|辛苦|劳动|家务|腰酸|背痛|做饭|做卫生|拖地|扫地|洗碗|操劳/,
+    reaction: '能体察到长辈日复一日的操劳与辛苦，这份心意真的最难得。我们一定要选真正能帮他们省力减负的实用好物！',
+    nextQuestion: '长辈平时主要是哪类家务或日常活动最让他们觉得吃力呢？',
+    targetKey: 'personality',
+    stage: 'preference',
     options: [
-      { value: '母亲节 / 父亲节', label: '母亲节 / 父亲节', emoji: '💐' },
-      { value: '中秋 / 春节年节', label: '中秋 / 春节过节', emoji: '🏮' },
-      { value: '长辈寿辰 / 生日', label: '长辈寿辰 / 生日', emoji: '🎂' },
-      { value: '银婚 / 金婚纪念', label: '父母结婚纪念日', emoji: '👵👴' },
-      { value: '日常孝敬关怀', label: '没有特别日子，就想孝敬爸妈', emoji: '🧣' },
+      { value: '弯腰扫地拖地 / 家里大面积清洁', label: '拖地扫地 / 弯腰清洁', emoji: '🧹' },
+      { value: '一日三餐下厨 / 备菜洗碗', label: '下厨洗碗 / 厨房油烟', emoji: '🍳' },
+      { value: '久坐久站 / 腰椎颈椎酸胀', label: '腰椎颈椎 / 酸胀疲劳', emoji: '💆' },
+      { value: '睡眠浅 / 夜里容易起夜失眠', label: '睡眠不好 / 容易失眠', emoji: '💤' },
     ],
   },
   {
@@ -43,18 +41,19 @@ export const LOCAL_KNOWLEDGE_RULES = [
     ],
   },
   {
-    id: 'elder_kitchen_practical',
+    id: 'elder_parent_general',
     category: 'elder',
-    pattern: /做饭|下厨|省钱|实用|节俭|家务|炒菜|煲汤|厨房/,
-    reaction: '操劳了一辈子的长辈最讲究“节俭与好用”，挑选省时省力、操作极简的厨房品质好物最讨喜。',
-    nextQuestion: '长辈平时在家里有哪些核心偏好？',
-    targetKey: 'personality',
-    stage: 'preference',
+    pattern: /爸|妈|母|父|长辈|老两口|公公|婆婆|爷爷|奶奶|外公|外婆|姥姥|姥爷/,
+    reaction: '送长辈最重在“体贴入微与真实有用”，不买华而不实的噱头，挑能真正融进他们日常生活的好物。',
+    nextQuestion: '这次给长辈选礼，主要是什么场合或由头呢？',
+    targetKey: 'occasion',
+    stage: 'discover',
     options: [
-      { value: '爱下厨煲汤 / 讲究食材', label: '爱下厨 / 讲究食材', emoji: '🍲' },
-      { value: '爱打理家务 / 讲究整洁', label: '爱打理家务 / 整洁', emoji: '🧺' },
-      { value: '喜欢散步晨练 / 养花', label: '散步晨练 / 养花弄草', emoji: '🪴' },
-      { value: '极度省电节俭 / 怕复杂', label: '极简好上手 / 怕复杂', emoji: '⚙️' },
+      { value: '母亲节 / 父亲节', label: '母亲节 / 父亲节', emoji: '💐' },
+      { value: '中秋 / 春节年节', label: '中秋 / 春节过节', emoji: '🏮' },
+      { value: '长辈寿辰 / 生日', label: '长辈寿辰 / 生日', emoji: '🎂' },
+      { value: '银婚 / 金婚纪念', label: '父母结婚纪念日', emoji: '👵👴' },
+      { value: '日常孝敬关怀', label: '没有特别日子，就想孝敬爸妈', emoji: '🧣' },
     ],
   },
 
@@ -219,21 +218,6 @@ export const LOCAL_KNOWLEDGE_RULES = [
       { value: '同僚生日庆祝', label: '同事生日庆祝', emoji: '🎂' },
     ],
   },
-  {
-    id: 'work_tea_office',
-    category: 'work',
-    pattern: /茶叶|喝茶|茶具|办公|钢笔|效率|桌搭|咖啡|低调/,
-    reaction: '商务办公人士最青睐低调内敛、兼具文化底蕴与办公实用性的高质感礼物。',
-    nextQuestion: '对方平时的办公与生活习惯偏向哪种？',
-    targetKey: 'personality',
-    stage: 'preference',
-    options: [
-      { value: '商务品茗 / 传统名茶', label: '名茶 / 精致茶具', emoji: '🍵' },
-      { value: '精品咖啡 / 提神办公', label: '精品咖啡 / 器具', emoji: '☕' },
-      { value: '高端文具 / 书写钢笔', label: '高端文具 / 钢笔', emoji: '🖋️' },
-      { value: '差旅出行 / 便携收纳', label: '差旅出行 / 便携装备', emoji: '🧳' },
-    ],
-  },
 
   /* ── 6. 孩子 / 晚辈专区 ──────────────────────────── */
   {
@@ -249,21 +233,6 @@ export const LOCAL_KNOWLEDGE_RULES = [
       { value: '升学 / 考学奖励', label: '开学 / 升学奖励', emoji: '🎒' },
       { value: '成长特别纪念', label: '成长特别纪念', emoji: '🌟' },
       { value: '新年压岁礼物', label: '新年压岁礼物', emoji: '🧧' },
-    ],
-  },
-  {
-    id: 'junior_lego_education',
-    category: 'junior',
-    pattern: /乐高|积木|拼装|绘本|科普|动漫|手办|科学|探索/,
-    reaction: '动手拼装和科普探索类的礼物，既能让孩子沉浸其中数小时，又能启发专注力与创造力。',
-    nextQuestion: '孩子平时最迷哪种类型的兴趣？',
-    targetKey: 'personality',
-    stage: 'preference',
-    options: [
-      { value: '乐高拼装 / 机械工程积木', label: '乐高 / 拼装积木', emoji: '🧩' },
-      { value: '科学探索 / 显微镜科普', label: '科学实验 / 探索器材', emoji: '🔬' },
-      { value: '绘本阅读 / 互动故事书', label: '精装绘本 / 故事书', emoji: '📖' },
-      { value: '户外轮滑 / 滑板运动', label: '户外滑板 / 运动装备', emoji: '🛹' },
     ],
   },
 
@@ -342,16 +311,32 @@ export const LOCAL_KNOWLEDGE_RULES = [
   },
 ]
 
+// 会话已使用点评集合（防重复）
+const usedReactionIds = new Set()
+
 /**
- * 本地知识库正则智能匹配函数
+ * 本地知识库正则智能匹配函数（严格只匹配用户本次输入，且绝对不重复）
  */
-export function matchLocalKnowledge(text = '', currentAnswers = {}) {
-  const combined = `${text} ${currentAnswers.recipient || ''} ${currentAnswers.occasion || ''} ${currentAnswers.budget || ''}`.trim()
-  
+export function matchLocalKnowledge(currentAnswerText = '', currentAnswers = {}) {
+  const text = String(currentAnswerText || '').trim()
+  if (!text) return null
+
+  // 1. 先从用户本次回答中精准匹配规则
   for (const rule of LOCAL_KNOWLEDGE_RULES) {
-    if (rule.pattern.test(combined)) {
+    if (rule.pattern.test(text) && !usedReactionIds.has(rule.id)) {
+      usedReactionIds.add(rule.id)
       return rule
     }
   }
+
+  // 2. 如果当前输入没命中特定词，按关系兜底
+  const recipient = String(currentAnswers.recipient || '')
+  for (const rule of LOCAL_KNOWLEDGE_RULES) {
+    if (rule.pattern.test(recipient) && !usedReactionIds.has(rule.id)) {
+      usedReactionIds.add(rule.id)
+      return rule
+    }
+  }
+
   return null
 }
