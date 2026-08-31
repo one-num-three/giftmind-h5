@@ -30,10 +30,10 @@ export const useSessionStore = defineStore('session', {
       return INITIAL_STEP
     },
     isFinished() {
-      return this.isAiReady || this.stepIndex >= 5
+      return this.isAiReady || this.stepIndex >= 6
     },
     progress() {
-      return progressOf(this.stepIndex, 4)
+      return progressOf(this.stepIndex, 5)
     },
     stageText() {
       const step = this.currentStep
