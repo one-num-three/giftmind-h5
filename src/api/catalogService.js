@@ -4,7 +4,8 @@
  *  —— 直连 giftmind-data-studio 官方标准 164 款商品与体验数据库：
  *     1. 多维检索：根据受礼人类型、预算范围、核心痛点与关键词匹配候选品；
  *     2. RAG 注入：将官方真实商品注入大模型 Prompt，驱动 AI 100% 从库中精挑细选；
- *     3. 拒绝凭空捏造，保证每件礼物均有官方名称、价格区间与真实描述。
+ *     3. 严格排雷：送长辈严禁出现巧克力、彩妆、情侣二次元周边等错位品；
+ *     4. 精神念想强力支持：智能推荐老照片画册定制、银婚金婚写真、照片打印机、全家视频等情感好物。
  * ══════════════════════════════════════════════════════════════
  */
 import OFFICIAL_GIFTS from '../data/officialGifts.json'
@@ -57,29 +58,38 @@ export function retrieveCandidates(answers = {}, maxCandidates = 14) {
       score += 15 // 通用型礼物
     }
 
-    // 2. 长辈专属场景强力加权
+    // 2. 长辈专属场景强力加权与排雷
     if (relCategory === 'elder') {
-      if (/体检|推拿|艾灸|足疗|养生|按摩|晨练|老电影|茶|戏曲|祈福|写真|钓鱼|温泉|舒缓|健康|家务|清洁|保暖/.test(name + desc + tags)) {
-        score += 50
+      // 精神念想/回忆线索加分
+      if (/念想|精神|回忆|照片|故事|纪念|陪伴|想念|牵挂/.test(queryTokens)) {
+        if (/照片|画册|写真|打印机|相机|回忆|老电影|茶|全家|定制/.test(name + desc + tags)) {
+          score += 65
+        }
       }
-      // 排除极端年轻化/潮玩/情侣/彩妆
-      if (/唇釉|口红|气垫|老鼠干|盲盒|吧唧|小卡|情侣漫画|电玩城/.test(name + tags)) {
-        score -= 100
+
+      // 健康/养生/日常舒适加分
+      if (/体检|推拿|艾灸|足疗|养生|按摩|晨练|老电影|茶|戏曲|祈福|写真|钓鱼|温泉|舒缓|健康|家务|清洁|保暖|照片|画册/.test(name + desc + tags)) {
+        score += 45
+      }
+
+      // 坚决排雷：长辈绝不推荐巧克力、彩妆、二次元潮玩、情侣物品
+      if (/巧克力|德芙|唇釉|口红|气垫|老鼠干|盲盒|吧唧|小卡|情侣漫画|电玩城|密室|露营夜|滑雪/.test(name + tags)) {
+        score -= 200
       }
     }
 
     // 3. 伴侣专属场景加权
     if (relCategory === 'lover') {
-      if (/口红|项链|首饰|手链|香水|双人|星空露营|漫画|手作|情侣|浪漫|睡衣/.test(name + desc + tags)) {
+      if (/口红|项链|首饰|手链|香水|双人|星空露营|漫画|手作|情侣|浪漫|睡衣|巧克力/.test(name + desc + tags)) {
         score += 45
       }
     }
 
-    // 4. 关键词命中加分
-    const keywords = ['健康', '养生', '按摩', '放松', '家务', '做饭', '咖啡', '摄影', '露营', '运动', '游戏', '首饰', '美妆', '体检', '温泉', '自清洁', '舒缓']
+    // 4. 关键词精准命中加分
+    const keywords = ['念想', '精神', '照片', '回忆', '健康', '养生', '按摩', '放松', '家务', '做饭', '咖啡', '摄影', '露营', '运动', '游戏', '首饰', '美妆', '体检', '温泉', '自清洁', '舒缓']
     for (const kw of keywords) {
       if (queryTokens.includes(kw) && (name.includes(kw) || desc.includes(kw) || tags.includes(kw) || traits.includes(kw))) {
-        score += 30
+        score += 35
       }
     }
 
@@ -111,7 +121,7 @@ export function formatCandidatesForPrompt(candidates = []) {
     .map((g, idx) => {
       const price = g.price_min && g.price_max ? `¥${g.price_min}–${g.price_max}` : g.price_min ? `¥${g.price_min}` : '价格适中'
       const desc = (g.short_description || '').replace(/\s+/g, ' ').slice(0, 70)
-      return `[编号 ${idx + 1}] ID: ${g.id} | 名称: 《${g.canonical_name}》 | 价格: ${price} | 简介: ${desc}`
+      return `[候选 ${idx + 1}] ID: ${g.id} | 名称: 《${g.canonical_name}》 | 价格: ${price} | 简介: ${desc}`
     })
     .join('\n')
 }

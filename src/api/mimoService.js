@@ -3,7 +3,7 @@
  *  AI 核心服务 (Xiaomi MiMo & DeepSeek 双引擎支持)
  *  —— 真正的大模型智能送礼策划大脑：
  *     1. 直连 giftmind-data-studio 官方 164 款商品库，RAG 驱动 AI 从库中精准选品；
- *     2. 实时懂行接话与情绪共鸣（Live Reaction / 杜绝重复）；
+ *     2. 实时懂行接话与情绪共鸣（Live Reaction / 动态去重，绝不复读）；
  *     3. 4 大多风格情话/心意卡片定制与仪式感生成。
  * ══════════════════════════════════════════════════════════════
  */
@@ -13,6 +13,9 @@ import { retrieveCandidates, formatCandidatesForPrompt } from './catalogService'
 const MIMO_API_KEY = 'sk-cvqx5j4irwxdbv0lmlggjd9md013lndoplm6rkl0qm9vbh65'
 const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1'
 const MIMO_MODEL = 'mimo-v2.5' // 经济型标准模型，测试成本低
+
+/** 全局会话已展示点评历史（防止在同一会话中重复） */
+const usedReactionTexts = new Set()
 
 /**
  * 基础请求封装（直连大模型接口）
@@ -56,7 +59,7 @@ export async function callMiMo(messages, { temperature = 0.7, jsonMode = false, 
 }
 
 /**
- * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（Live Reaction）
+ * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（Live Reaction / 杜绝重复）
  */
 export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
   if (answerValue === '' || (Array.isArray(answerValue) && answerValue.length === 0)) {
@@ -73,9 +76,10 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
 请针对用户的具体回答【${ansStr}】，给出一句极其自然、懂行、有温度且让人感觉“被深刻理解”的即时点评/接话（1~2句话，35字以内）。
 要求：
 1. 绝对不要像机器人重复用户的词！要像身边的懂行朋友一样共情或点出背后的选品逻辑。
-2. 切忌自以为是添加狭隘预设，保持开放与关怀。
-3. 纯中文输出，严禁任何英文单词。
-4. 直接输出这一两句文案，不要带任何引号或解释。`
+2. 若用户提到“念想 / 精神 / 陪伴 / 回忆”，点明礼物是“承载心意与牵挂的念想载体”！
+3. 切忌自以为是添加狭隘预设，保持开放与关怀。
+4. 纯中文输出，严禁任何英文单词。
+5. 直接输出这一两句文案，不要带任何引号或解释。`
 
   const userPrompt = `受礼人：${recipient}
 场合：${occasion}
@@ -90,10 +94,14 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.75, timeout: 5000 }
+      { temperature: 0.75, timeout: 6000 }
     )
     if (reaction && reaction.length > 4) {
-      return reaction.replace(/^["“”]|["“”]$/g, '').trim()
+      const cleanReaction = reaction.replace(/^["“”]|["“”]$/g, '').trim()
+      if (!usedReactionTexts.has(cleanReaction)) {
+        usedReactionTexts.add(cleanReaction)
+        return cleanReaction
+      }
     }
   } catch (err) {
     console.log('[AI Live Reaction fallback to local knowledge base]:', err)
@@ -101,11 +109,28 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
 
   // 2. 离线/超时兜底（带去重过滤）
   const matched = matchLocalKnowledge(ansStr, currentAnswers)
-  if (matched?.reaction) {
+  if (matched?.reaction && !usedReactionTexts.has(matched.reaction)) {
+    usedReactionTexts.add(matched.reaction)
     return matched.reaction
   }
 
-  return '能体察到长辈的辛劳，这份心意最难得。我们顺着这个细节来挑最减负贴心的好物！'
+  // 3. 动态情境多样化兜底（绝不重复同一句话）
+  const dynamicFallbacks = [
+    `“${ansStr}”这个细节太走心了，礼物承载的就是这种看不见却摸得着的牵挂。`,
+    `记下了！这种切身的真实心愿，往往才是挑对礼物的灵魂所在。`,
+    `这份心意真的很体贴，在选品上我们会牢牢锁定这种真实的情感分量。`,
+    `能留意到这样的日常需求，说明你对 TA 的用心程度远超一般人。`,
+    `这个方向选得极好，既有深厚的温度，又特别经得起时间推敲。`
+  ]
+
+  for (const fb of dynamicFallbacks) {
+    if (!usedReactionTexts.has(fb)) {
+      usedReactionTexts.add(fb)
+      return fb
+    }
+  }
+
+  return `记下了「${ansStr}」，我们会把这份特别的心意融入专属方案中。`
 }
 
 /**
@@ -124,24 +149,24 @@ export async function generateAiPlan(answers = {}) {
   const candidateText = formatCandidatesForPrompt(candidateGifts)
 
   const systemPrompt = `你是精通人情世故与生活品味的资深礼物策划专家 GiftMind。
-你需要根据用户的问卷信息，从【GiftMind 官方商品数据库候选集】中为用户挑选 3 件最贴切的真实礼物方案。
+你需要根据用户的问卷信息，从【GiftMind 官方商品数据库候选集】中为用户精选 3 件最贴切的真实礼物方案。
 
 【GiftMind 官方真实商品库候选清单（必须优先从中挑选）】：
 ${candidateText}
 
 【选品与推荐规则】：
-1. 必须优先从上方官方商品库候选清单中挑选 3 件最契合的真实商品/体验（必须使用清单中的真实名称 name、价格 price、ID id）；
-2. 结合用户的具体回答与痛点，为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
+1. 必须优先从上方官方商品库候选清单中挑选 3 件最契合的真实商品/体验（使用清单中的真实名称 name、价格 price、ID id）；
+2. 结合用户的具体回答与心愿痛点（如送长辈念想/陪伴，挑老照片画册/全家写真/照片打印机/舒缓体验；送伴侣挑浪漫/首饰/体验），为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
 3. 附上一封真挚、细腻、字字戳心的专属信件（paragraphs 3~4 段）。
 
 必须输出严格 JSON 格式：
 {
-  "title": "方案主标题（12字以内，如：为爸妈定制的舒缓生活提案）",
-  "subtitle": "一句话温暖副标题（如：用贴心关怀与陪伴，换下他们操劳的双手的温度心意）",
+  "title": "方案主标题（12字以内，如：为爸妈定制的心意生活提案）",
+  "subtitle": "一句话温暖副标题（如：用贴心关怀与陪伴，把牵挂化作日常的温度）",
   "insight": {
     "summary": "专业洞察陈述（80字左右，深入点出为什么这么选）",
-    "traits": ["体贴孝顺", "健康关怀", "品质生活"],
-    "keyPoint": "选品核心逻辑（如：拒绝华而不实，直击长辈日常起居与放松痛点）"
+    "traits": ["体贴孝顺", "情感念想", "品质生活"],
+    "keyPoint": "选品核心逻辑（如：拒绝华而不实，直击长辈日常起居与情感陪伴）"
   },
   "gifts": [
     {
@@ -193,7 +218,6 @@ ${candidateText}
 
 function sanitizePlanData(data, answers, candidateGifts = []) {
   const gifts = (data.gifts || []).map((g, i) => {
-    // 尽量关联原数据库中的完整数据
     const match = candidateGifts.find((cg) => cg.id === g.id || cg.canonical_name === g.name)
     const cleanName = String(g.name || match?.canonical_name || '心意精选好物').replace(/[《》]/g, '')
     const price = String(g.price || (match?.price_min ? `¥${match.price_min}-${match.price_max}` : answers.budget || '¥300-600'))

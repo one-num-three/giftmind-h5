@@ -70,8 +70,8 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
   const filledKeys = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== '')
   const answeredCount = filledKeys.length
 
-  // 如果已经问了 4 题以上且预算和场合均已明晰，即可准备生成
-  if (answeredCount >= 4 && answers.budget && answers.occasion) {
+  // 🌟 严密收敛：最多 3~4 道题直接出方案，绝不无限循环绕圈子！
+  if (answeredCount >= 3 || stepIndex >= 3) {
     return { isReady: true }
   }
 

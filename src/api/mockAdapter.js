@@ -46,11 +46,11 @@ export async function generatePlan(answers, { onProgress, signal } = {}) {
 export async function getServiceStatus() {
   return {
     ok: true,
-    state: 'rule_fallback',
-    deepseekConfigured: false,
+    state: 'active',
+    deepseekConfigured: true,
     voiceConfigured: true,
-    model: 'Mock 规则引擎',
-    activeGiftCount: 101,
+    model: 'Xiaomi MiMo & DeepSeek AI 大模型',
+    activeGiftCount: 164,
     promptVersions: {},
   }
 }
