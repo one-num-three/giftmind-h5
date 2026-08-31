@@ -20,7 +20,7 @@ const router = useRouter()
 const session = useSessionStore()
 const planStore = usePlanStore()
 const ui = useUiStore()
-const { typing, submit, skipStep, goBack, quickFinish, defer } = useChatFlow()
+const { typing, speedMode, toggleSpeedMode, submit, skipStep, goBack, quickFinish, defer } = useChatFlow()
 
 const streamRef = ref(null)
 const footRef = ref(null)
@@ -193,13 +193,24 @@ onUnmounted(() => {
       </button>
       <div class="chat__brand" role="heading" aria-level="1" data-route-focus>GiftMind</div>
       <div class="chat__head-right">
+        <!-- ⚡ 极速 / ☕ 沉浸 速率切换按钮 -->
+        <button
+          class="chat__speed-btn tap"
+          type="button"
+          :title="speedMode === 'fast' ? '当前为极速模式，点击切为慢速沉浸' : '当前为慢速沉浸模式，点击切为极速'"
+          @click="toggleSpeedMode"
+        >
+          <span v-if="speedMode === 'fast'">⚡ 极速</span>
+          <span v-else>☕ 沉浸</span>
+        </button>
+
         <button
           v-if="session.stepIndex >= 2"
           class="chat__quick-btn tap"
           type="button"
           @click="quickFinish"
         >
-          <span>✨ 随时看方案</span>
+          <span>✨ 看方案</span>
         </button>
         <div v-else class="chat__stage">{{ session.stageText }}</div>
       </div>
@@ -333,7 +344,29 @@ onUnmounted(() => {
 .chat__head-right {
   display: flex;
   align-items: center;
+  gap: 6px;
   flex-shrink: 0;
+}
+.chat__speed-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--c-bg-subtle, #f3f4f6);
+  color: var(--c-ink-2, #4b5563);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--c-border, #e5e7eb);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.chat__speed-btn:active {
+  transform: scale(0.95);
+  background: var(--c-rose-tint, #fff1f2);
+  color: var(--c-rose, #f43f5e);
 }
 .chat__quick-btn {
   display: inline-flex;

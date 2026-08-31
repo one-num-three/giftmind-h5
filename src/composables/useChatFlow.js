@@ -4,9 +4,10 @@
  *
  *  核心职责：
  *    1. 用户作答瞬间 0 延迟逐字流式打出高情商懂行点评；
- *    2. MiMo 极速大模型动态追问，文本真实字字蹦出（10~15ms/字），彻底消除枯燥等待感；
- *    3. 稳定不卡顿、文字全部打完后选项气泡弹性出现；
- *    4. 支持随时一键跳过直接出方案（quickFinish）。
+ *    2. 支持【⚡ 极速 (Fast)】与【☕ 沉浸 (Slow)】两种打字与节奏速率自由切换；
+ *    3. MiMo / DeepSeek 智能模型动态追问；
+ *    4. 稳定不卡顿、文字全部打完后选项气泡弹性出现；
+ *    5. 支持随时一键跳过直接出方案（quickFinish）。
  * ══════════════════════════════════════════════════════════════
  */
 import { onMounted, onUnmounted, ref } from 'vue'
@@ -21,6 +22,14 @@ const FINISH_TEXT = '我已经完全听明白了，正在为您定制最具质�
 export function useChatFlow() {
   const session = useSessionStore()
   const router = useRouter()
+
+  /** 打字机速率模式：'fast'（⚡ 极速） | 'slow'（☕ 沉浸/缓慢） */
+  const speedMode = ref(localStorage.getItem('gm_chat_speed') || 'fast')
+
+  function toggleSpeedMode() {
+    speedMode.value = speedMode.value === 'fast' ? 'slow' : 'fast'
+    localStorage.setItem('gm_chat_speed', speedMode.value)
+  }
 
   /** AI 是否正在输出/思考中（true 时底部选项面板隐藏，打完后弹性展示） */
   const typing = ref(false)
@@ -41,12 +50,16 @@ export function useChatFlow() {
   }
 
   /**
-   * 🌟 真实逐字打字机输出（10~15ms/字，遇标点微顿，真人手感）
+   * 🌟 真实逐字打字机输出（按 speedMode 动态调整字符速率）
    */
   async function streamSingleMessage(fullText, stepId, runId) {
     if (!fullText || typeof fullText !== 'string') return true
     const clean = fullText.trim()
     if (!clean) return true
+
+    const isFast = speedMode.value === 'fast'
+    const charDelay = isFast ? 4 : 18
+    const pauseDelay = isFast ? 12 : 36
 
     // 1. 创建流式消息气泡
     const msg = session.pushMessage({ role: 'ai', text: '', stepId, streaming: true })
@@ -58,11 +71,11 @@ export function useChatFlow() {
       msg.text += chars[i]
       const ch = chars[i]
       const isPause = /[,.!?:;，。！？：；\n]/.test(ch)
-      await delay(isPause ? 25 : 10)
+      await delay(isPause ? pauseDelay : charDelay)
     }
 
     msg.streaming = false
-    await delay(60)
+    await delay(isFast ? 40 : 100)
     return true
   }
 
@@ -72,11 +85,12 @@ export function useChatFlow() {
   async function emitMessages(list, stepId, runId) {
     const raw = Array.isArray(list) ? list : list ? [list] : []
     const msgs = raw.filter((t) => typeof t === 'string' && t.trim())
+    const isFast = speedMode.value === 'fast'
     for (let i = 0; i < msgs.length; i++) {
       if (!isRunValid(runId)) return false
       await streamSingleMessage(msgs[i], stepId, runId)
       if (i < msgs.length - 1) {
-        await delay(120)
+        await delay(isFast ? 80 : 200)
       }
     }
     return true
@@ -101,7 +115,7 @@ export function useChatFlow() {
     typing.value = true
     await streamSingleMessage(FINISH_TEXT, DONE_TAG, runId)
     typing.value = false
-    await delay(500)
+    await delay(400)
     if (!isRunValid(runId)) return
     router.replace('/summary')
   }
@@ -117,7 +131,7 @@ export function useChatFlow() {
         const reactionText = await getLiveReaction(lastAnsweredStep, lastAnswerValue, session.answers)
         if (isRunValid(runId) && reactionText) {
           await streamSingleMessage(reactionText, `${lastAnsweredStep.id}_reaction`, runId)
-          await delay(80)
+          await delay(speedMode.value === 'fast' ? 50 : 120)
         }
       } catch (err) {
         console.warn('Reaction error:', err)
@@ -152,7 +166,7 @@ export function useChatFlow() {
       for (const m of nextStep.messages) {
         if (!isRunValid(runId)) break
         await streamSingleMessage(m, nextStep.id, runId)
-        await delay(80)
+        await delay(speedMode.value === 'fast' ? 60 : 120)
       }
     }
 
@@ -238,5 +252,5 @@ export function useChatFlow() {
     return t
   }
 
-  return { typing, submit, skipStep, goBack, quickFinish, defer }
+  return { typing, speedMode, toggleSpeedMode, submit, skipStep, goBack, quickFinish, defer }
 }
