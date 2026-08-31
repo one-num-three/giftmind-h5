@@ -660,9 +660,9 @@ onUnmounted(() => {
         </button>
         <div class="actionbar__inner">
           <GButton variant="outline" size="lg" @click="restartOpen = true">重新策划</GButton>
-          <GButton class="grow" variant="primary" size="lg" @click="goShare">
-            {{ selectedGiftId ? '下一步 · 做成给 TA 的页面' : '先选一件礼物' }}
-            <GIcon name="arrowRight" :size="17" />
+          <GButton class="grow" variant="primary" size="lg" @click="onCopyPlan">
+            <GIcon name="copy" :size="17" />
+            一键复制完整方案
           </GButton>
         </div>
       </div>
@@ -675,25 +675,15 @@ onUnmounted(() => {
       </GEmpty>
     </div>
 
-    <!-- ══ 分享 / 更多 ══ -->
-    <GSheet v-model="moreOpen" title="分享与更多">
+    <!-- ══ 更多操作 ══ -->
+    <GSheet v-model="moreOpen" title="方案选项与操作">
       <ul class="acts">
-        <li>
-          <button class="act tap" type="button" @click="goShare">
-            <span class="act__icon"><GIcon name="mail" :size="18" /></span>
-            <span class="act__text">
-              <span class="act__title">做成给 TA 的页面</span>
-              <span class="act__desc">生成一个专属链接，TA 打开就能看到全部</span>
-            </span>
-            <GIcon name="chevron" :size="16" />
-          </button>
-        </li>
         <li>
           <button class="act tap" type="button" @click="onCopyPlan">
             <span class="act__icon"><GIcon name="copy" :size="18" /></span>
             <span class="act__text">
               <span class="act__title">复制整份方案</span>
-              <span class="act__desc">纯文字版，随手粘到备忘录或聊天框</span>
+              <span class="act__desc">纯文字版，随手粘到备忘录或微信聊天框</span>
             </span>
             <GIcon name="chevron" :size="16" />
           </button>

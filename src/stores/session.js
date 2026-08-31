@@ -1,9 +1,10 @@
 /**
  * 会话 Store —— 一次「策划」从头到尾的所有状态
- * 消息流、答案、当前步骤、进度都在这里，页面只负责渲染。
+ * 现由深度 AI 买手大模型主导出题与槽位自适应。
  */
 import { defineStore } from 'pinia'
-import { resolveSteps, stageLabel, progressOf } from '@/config/flow'
+import { INITIAL_STEP } from '@/api/aiQuestionEngine'
+import { stageLabel, progressOf } from '@/config/flow'
 import { uid } from '@/utils/helpers'
 import storage from '@/utils/storage'
 
@@ -18,20 +19,21 @@ export const useSessionStore = defineStore('session', {
     stepIndex: 0,
     status: 'idle', // idle | asking | waiting | done
     startedAt: 0,
+    activeDynamicStep: null,
     isAiReady: false,
   }),
 
   getters: {
-    /** 完整专业步骤序列 */
-    steps: (s) => resolveSteps(s.answers),
     currentStep() {
-      return this.steps[this.stepIndex] || null
+      if (this.stepIndex === 0) return INITIAL_STEP
+      if (this.activeDynamicStep) return this.activeDynamicStep
+      return INITIAL_STEP
     },
     isFinished() {
-      return this.isAiReady || this.stepIndex >= this.steps.length
+      return this.isAiReady || this.stepIndex >= 5
     },
     progress() {
-      return progressOf(this.stepIndex, this.steps.length)
+      return progressOf(this.stepIndex, 4)
     },
     stageText() {
       const step = this.currentStep
@@ -47,6 +49,7 @@ export const useSessionStore = defineStore('session', {
         this.messages = []
         this.answers = {}
         this.stepIndex = 0
+        this.activeDynamicStep = null
         this.isAiReady = false
         this.startedAt = Date.now()
       }
@@ -65,6 +68,11 @@ export const useSessionStore = defineStore('session', {
         target.text = newText
         target.streaming = isStreaming
       }
+    },
+
+    setDynamicStep(step) {
+      this.activeDynamicStep = step
+      this.persistDraft()
     },
 
     forceFinish() {
@@ -123,14 +131,8 @@ export const useSessionStore = defineStore('session', {
     },
 
     revisit(stepId) {
-      const snapshot = this.steps
-      const index = snapshot.findIndex((step) => step.id === stepId)
-      if (index < 0) return false
-      const affected = new Set(snapshot.slice(index).map((step) => step.key))
-      for (const key of affected) delete this.answers[key]
       const firstMessageIndex = this.messages.findIndex((message) => message.stepId === stepId)
       if (firstMessageIndex >= 0) this.messages.splice(firstMessageIndex)
-      this.stepIndex = index
       this.status = 'asking'
       this.persistDraft()
       return true
@@ -163,6 +165,7 @@ export const useSessionStore = defineStore('session', {
         stepIndex: this.stepIndex,
         messages: cleanMessages,
         startedAt: this.startedAt,
+        activeDynamicStep: this.activeDynamicStep,
         isAiReady: this.isAiReady,
       })
     },
