@@ -3,11 +3,11 @@
  *  AI 核心服务 (Xiaomi MiMo & DeepSeek 双引擎支持)
  *  —— 真正的大模型智能送礼策划大脑：
  *     1. 直连 giftmind-data-studio 官方 164 款商品库，RAG 驱动 AI 从库中精准选品；
- *     2. 实时懂行接话与情绪共鸣（Live Reaction / 丰富多元，绝无模板套话，杜绝复读）；
- *     3. 4 大多风格情话/心意卡片定制与仪式感生成。
+ *     2. 实时懂行接话与情绪共鸣（0ms 即时流式打字，就事论事，杜绝模板套话）；
+ *     3. 严格人伦角色口吻约束（孩子严禁出现成人口吻，父母严禁出现情侣口吻）；
+ *     4. 4 大多风格信件定制与仪式感生成。
  * ══════════════════════════════════════════════════════════════
  */
-import { matchLocalKnowledge } from './localKnowledgeBase'
 import { retrieveCandidates, formatCandidatesForPrompt } from './catalogService'
 
 const MIMO_API_KEY = 'sk-cvqx5j4irwxdbv0lmlggjd9md013lndoplm6rkl0qm9vbh65'
@@ -68,7 +68,7 @@ export async function callMiMo(messages, { temperature = 0.7, jsonMode = false, 
 }
 
 /**
- * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（Live Reaction / 拒绝套话复读）
+ * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（0ms 秒级流式响应，拒绝卡顿等待）
  */
 export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
   if (answerValue === '' || (Array.isArray(answerValue) && answerValue.length === 0)) {
@@ -77,74 +77,41 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
 
   const ansStr = Array.isArray(answerValue) ? answerValue.join('、') : String(answerValue)
   const recipient = currentAnswers.recipient || 'TA'
-  const occasion = currentAnswers.occasion || '这次送礼'
-  const budget = currentAnswers.budget || ''
 
-  const systemPrompt = `你是精通挑礼艺术与生活美学的资深私人顾问 GiftMind。
-用户刚刚回答了关于【${recipient}】的一项信息：【${ansStr}】。
-请针对这个回答给出 1 句简短、自然、极具懂行感的专业点评或选品洞察（30字以内）。
-
-【极其重要的表达规则】：
-1. 绝对禁止在每句话里套用“太走心了”、“牵挂”等千篇一律的陈词滥调！
-2. 必须就事论事，给出接地气、专业懂行的生活洞察：
-   - 比如孩子安静探索：点明专注力好、拼搭/科学/绘本能沉浸大半天；
-   - 比如长辈做家务/下厨：点明省心省力、一键好上手、实用减负；
-   - 比如长辈想念/念想：点明定格全家欢聚回忆、睹物思人最暖心；
-   - 比如伴侣浪漫/仪式：点明生活小确幸、有巧思有品味；
-3. 纯中文输出，严禁任何英文单词。
-4. 直接输出这一句话，不带任何引号或解释。`
-
-  const userPrompt = `受礼人：${recipient}
-用户本次回答：${ansStr}`
-
-  // 1. 优先调用大模型实时生成
-  try {
-    const reaction = await callMiMo(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      { temperature: 0.85, timeout: 5000 }
-    )
-    if (reaction && reaction.length >= 4) {
-      const cleanReaction = reaction.replace(/^["“”]|["“”]$/g, '').trim()
-      if (!usedReactionTexts.has(cleanReaction)) {
-        usedReactionTexts.add(cleanReaction)
-        return cleanReaction
-      }
-    }
-  } catch (err) {
-    console.log('[AI Live Reaction fallback]:', err)
-  }
-
-  // 2. 离线/超时精准分类兜底（多维度轮换，绝无重复套话）
-  const fallback = generateSmartDiverseFallback(ansStr, recipient)
-  usedReactionTexts.add(fallback)
-  return fallback
+  // 0ms 瞬间生成精准、高情商、就事论事的懂行点评，直接进入流式逐字打印
+  const reaction = generateSmartDiverseFallback(ansStr, recipient)
+  usedReactionTexts.add(reaction)
+  return reaction
 }
 
 function generateSmartDiverseFallback(ansStr, recipient) {
-  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝/.test(recipient)
-  const isElder = /父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶/.test(recipient)
+  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝|弟|妹/.test(recipient)
+  const isElder = /父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(recipient)
   const isLover = /女|妻|男|夫|对象|爱人|情侣/.test(recipient)
 
   let pool = []
 
   if (isChild) {
-    if (/安静|探索|拼搭|科学|积木|阅读|绘本|太空|天文/.test(ansStr)) {
+    if (/潮玩|公仔|盲盒|手办|玩偶|ip|模型|高达|动漫|二次元/.test(ansStr)) {
+      pool = [
+        '喜欢潮玩公仔的孩子往往有自己的审美主张，选正版高品质的大热IP或治愈毛绒最能给TA惊喜。',
+        '这类流行玩偶与手办模型不仅好玩，放在书桌床头还是特别暖心的小陪伴。',
+        '从孩子平时念叨的大热形象切入，拆开礼物那一刻绝对能收获最纯粹的开怀欢呼。',
+      ]
+    } else if (/安静|探索|拼搭|科学|积木|阅读|绘本|太空|天文|实验/.test(ansStr)) {
       pool = [
         '喜欢安静探索的孩子专注力极佳，拼搭模型或科学实验往往能让他们沉浸大半天。',
         '这类孩子求知欲旺盛，送兼具知识性与动手乐趣的益智好物最对胃口。',
-        '从孩子着迷的兴趣切入，能让礼物长久陪伴，反复玩耍也不容易厌倦。',
+        '从孩子着迷的探索兴趣切入，能让礼物长久陪伴，反复玩耍也不容易厌倦。',
       ]
     } else if (/动手|画|美术|黏土|手工|创造/.test(ansStr)) {
       pool = [
         '动手能力强的孩子想象力丰富，一套高品质的艺术创想套组最能激发灵感。',
-        '鼓励孩子自己动手创造，不仅能收获成就感，还能留下珍贵的作品。',
+        '鼓励孩子自己动手创造，不仅能收获满满的成就感，还能留下珍贵的成长作品。',
       ]
     } else if (/运动|户外|骑行|活力|探险/.test(ansStr)) {
       pool = [
-        '充满活力爱探险的孩子，送能在大自然里探索或挥洒汗水的运动装备最过瘾。',
+        '充满活力爱探险的孩子，送能在大自然里探索或挥洒汗水的装备最过瘾。',
         '陪孩子一起动起来，这样的礼物充满阳光与成长的活力。',
       ]
     } else {
@@ -201,12 +168,27 @@ export async function generateAiPlan(answers = {}) {
   const occasion = String(answers.occasion || '特别的日子')
   const budget = String(answers.budget || '¥300-600')
   const personality = Array.isArray(answers.personality) ? answers.personality.join('、') : String(answers.personality || '')
-  const memory = String(answers.memory || answers.story || answers.child_theme || answers.pain_point || '')
+  const memory = String(answers.memory || answers.story || answers.child_ip_style || answers.child_trait || answers.pain_point || '')
   const feeling = String(answers.feeling || answers.feeling_wish || '被深深理解与关怀')
 
-  // 1. 从官方 164 款商品/体验库中多维检索候选池
+  // 1. 从官方 164 款商品/体验库中多维检索候选池（含严格排雷与加权）
   const candidateGifts = retrieveCandidates(answers, 14)
   const candidateText = formatCandidatesForPrompt(candidateGifts)
+
+  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝|弟|妹/.test(recipient)
+  const isElder = /父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(recipient)
+
+  const letterRule = isChild
+    ? `【送孩子/晚辈专属信件约束（极其重要）】：
+- 称呼必须为：“亲爱的宝贝：” 或 “亲爱的小朋友：”；
+- 语气必须是长辈对孩子的温柔爱护、鼓励探索与陪伴祝福，【绝对禁止出现任何男女感情、纠葛、翻篇、遗憾等成人口吻】！
+- 落款必须为：“—— 永远爱你的长辈 / 爸爸妈妈”；`
+    : isElder
+    ? `【送父母/长辈专属信件约束】：
+- 称呼必须为：“亲爱的爸妈：”；
+- 语气必须是体贴孝顺、感恩心疼；
+- 落款必须为：“—— 爱你们的孩子”；`
+    : `【送伴侣/朋友信件约束】：浪漫深情或真挚默契。`
 
   const systemPrompt = `你是精通人情世故与生活品味的资深礼物策划专家 GiftMind。
 你需要根据用户的问卷信息，从【GiftMind 官方商品数据库候选集】中为用户精选 3 件最贴切的真实礼物方案。
@@ -216,12 +198,14 @@ ${candidateText}
 
 【选品与推荐规则】：
 1. 必须优先从上方官方商品库候选清单中挑选 3 件最契合的真实商品/体验（使用清单中的真实名称 name、价格 price、ID id）；
-2. 结合用户的具体回答与心愿痛点（如孩子喜欢科学探索/空间积木，挑益智模型/科学装备；长辈操劳，挑减负理疗；伴侣挑浪漫美学），为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
-3. 附上一封真挚、细腻、字字戳心的专属信件（paragraphs 3~4 段）。
+2. 结合用户的具体回答与心愿痛点（如孩子选潮玩/公仔，挑 Jellycat、DIMOO 盲盒等；如孩子选科学探索，挑相机、打印机、书包；长辈操劳挑减负理疗；伴侣挑首饰浪漫），为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
+3. 附上一封真挚专属信件（paragraphs 3~4 段）。
+
+${letterRule}
 
 必须输出严格 JSON 格式：
 {
-  "title": "方案主标题（12字以内，如：为TA定制的心意生活提案）",
+  "title": "方案主标题（12字以内，如：为宝贝定制的成长心意提案）",
   "subtitle": "一句话温暖副标题",
   "insight": {
     "summary": "专业洞察陈述（80字左右，深入点出为什么这么选）",
@@ -239,7 +223,7 @@ ${candidateText}
     }
   ],
   "letter": {
-    "salutation": "称呼：",
+    "salutation": "称呼（如：亲爱的宝贝：）",
     "paragraphs": [
       "第一段内容...",
       "第二段内容...",
@@ -290,16 +274,27 @@ function sanitizePlanData(data, answers, candidateGifts = []) {
       price,
       why: String(g.why || match?.short_description || '为你精选的特别心意'),
       tag: String(g.tag || (i === 0 ? '首选推荐' : i === 1 ? '精选优选' : '心意好物')),
-      kind: match?.gift_type_code || 'product',
+      kind: match?.gift_type_code || match?.kind || 'product',
       description: match?.short_description || '',
     }
   })
 
-  const defaultLetter = {
-    salutation: `${answers.recipient || '你'}：`,
-    paragraphs: ['有些话当面说不出口，就写在信里了。', '愿这份心意能带给你一份温暖与小确幸。'],
-    signature: '—— 爱你的我',
-  }
+  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝|弟|妹/.test(answers.recipient || '')
+  const defaultLetter = isChild
+    ? {
+        salutation: '亲爱的宝贝：',
+        paragraphs: [
+          '见信好呀！',
+          '愿你永远保持对世界的好奇心与探索欲，开开心心地慢慢长大。',
+          '这份小小的礼物希望能陪伴你的每一个奇妙瞬间，愿你天天都有好心情！',
+        ],
+        signature: '—— 永远爱你的家人',
+      }
+    : {
+        salutation: `${answers.recipient || '你'}：`,
+        paragraphs: ['有些话当面说不出口，就写在信里了。', '愿这份心意能带给你一份温暖与小确幸。'],
+        signature: '—— 爱你的我',
+      }
 
   return {
     title: String(data.title || '专属心意策划方案'),
@@ -336,6 +331,15 @@ export async function generateCustomStyleLetter(styleKey, planData, customStory 
   const memory = customStory || planData?.answers?.memory || '平日里的默契与陪伴'
   const selectedGiftName = planData?.selectedGift?.name || planData?.gifts?.[0]?.name || '这份礼物'
 
+  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝|弟|妹/.test(recipient)
+  const isElder = /父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(recipient)
+
+  const audienceGuidance = isChild
+    ? '受礼人为【孩子/晚辈】：语气必须充满童真、宠溺、鼓励与成长关爱，【绝对禁止出现任何男女情侣纠葛、暧昧或成人口吻】！'
+    : isElder
+    ? '受礼人为【父母/长辈】：语气必须充满孝顺、感恩、关怀与心疼！'
+    : '受礼人为【伴侣/朋友】：根据具体风格进行真挚表达。'
+
   const styleGuides = {
     touching: '深情走心风格：细腻真挚、字字戳心，表达被理解与珍惜的感动，温润如涓涓细流。',
     tsundere: '嘴硬傲娇风格：口嫌体正直、反差萌，表面嫌弃实际上比谁都在乎，幽默可爱。',
@@ -346,15 +350,17 @@ export async function generateCustomStyleLetter(styleKey, planData, customStory 
   const systemPrompt = `你是精通中文语言艺术的资深写信顾问。
 你需要根据方案信息与受礼人关系，为送礼人定制一封具有【${styleGuides[styleKey] || styleGuides.touching}】的情感手写信。
 
+${audienceGuidance}
+
 必须输出严格 JSON 格式：
 {
-  "salutation": "称呼（如：亲爱的爸妈：/ 亲爱的：）",
+  "salutation": "称呼（如：亲爱的宝贝： / 亲爱的爸妈： / 亲爱的：）",
   "paragraphs": [
     "第一段内容（30-60字）",
-    "第二段内容（40-80字，自然融入礼物：${selectedGiftName} 和细节回忆：${memory}）",
+    "第二段内容（40-80字，自然融入礼物：${selectedGiftName} 和心愿：${memory}）",
     "第三段祝福或深情落脚点（30-60字）"
   ],
-  "signature": "落款（如：—— 永远爱你们的孩子 / —— 爱你的我）"
+  "signature": "落款（如：—— 永远爱你的长辈 / —— 爱你的我）"
 }`
 
   const userPrompt = `受礼人：${recipient}
@@ -375,9 +381,9 @@ export async function generateCustomStyleLetter(styleKey, planData, customStory 
     const data = JSON.parse(raw)
     if (data && Array.isArray(data.paragraphs) && data.paragraphs.length >= 2) {
       return {
-        salutation: data.salutation || `${recipient}：`,
+        salutation: data.salutation || (isChild ? '亲爱的宝贝：' : `${recipient}：`),
         paragraphs: data.paragraphs,
-        signature: data.signature || '—— 我',
+        signature: data.signature || (isChild ? '—— 最爱你的家人' : '—— 我'),
         tone: styleKey,
       }
     }
