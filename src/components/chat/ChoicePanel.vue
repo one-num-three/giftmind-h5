@@ -104,15 +104,21 @@ onUnmounted(() => {
       >
         {{ opt.label }}
       </GChip>
+
+      <!-- 🌟 所有问题显式提供「其他/自定义输入」选项 -->
+      <GChip
+        v-if="step.allowCustom !== false"
+        emoji="✍️"
+        :selected="false"
+        @click="emit('custom', [...selected])"
+      >
+        其他 / 自定义输入…
+      </GChip>
     </div>
 
-    <div v-if="step.allowCustom || showSkipLink" class="choice__links">
-      <button v-if="step.allowCustom" class="link tap" @click="emit('custom', [...selected])">
-        <GIcon name="edit" :size="13" />
-        <span>或者自己说…</span>
-      </button>
+    <div v-if="showSkipLink" class="choice__links">
       <span class="grow" />
-      <button v-if="showSkipLink" class="link link--skip tap" @click="emit('skip')">跳过</button>
+      <button class="link link--skip tap" @click="emit('skip')">跳过</button>
     </div>
 
     <GButton

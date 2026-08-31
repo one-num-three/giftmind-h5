@@ -3,7 +3,7 @@
  *  AI 核心服务 (Xiaomi MiMo & DeepSeek 双引擎支持)
  *  —— 真正的大模型智能送礼策划大脑：
  *     1. 直连 giftmind-data-studio 官方 164 款商品库，RAG 驱动 AI 从库中精准选品；
- *     2. 实时懂行接话与情绪共鸣（Live Reaction / 动态去重，绝不复读）；
+ *     2. 实时懂行接话与情绪共鸣（Live Reaction / 丰富多元，绝无模板套话，杜绝复读）；
  *     3. 4 大多风格情话/心意卡片定制与仪式感生成。
  * ══════════════════════════════════════════════════════════════
  */
@@ -16,6 +16,7 @@ const MIMO_MODEL = 'mimo-v2.5' // 经济型标准模型，测试成本低
 
 /** 全局会话已展示点评历史（防止在同一会话中重复） */
 const usedReactionTexts = new Set()
+let fallbackCycle = 0
 
 /**
  * 基础请求封装（直连大模型接口）
@@ -59,7 +60,7 @@ export async function callMiMo(messages, { temperature = 0.7, jsonMode = false, 
 }
 
 /**
- * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（Live Reaction / 杜绝重复）
+ * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（Live Reaction / 拒绝套话复读）
  */
 export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
   if (answerValue === '' || (Array.isArray(answerValue) && answerValue.length === 0)) {
@@ -71,20 +72,21 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
   const occasion = currentAnswers.occasion || '这次送礼'
   const budget = currentAnswers.budget || ''
 
-  const systemPrompt = `你是精通人情世故的资深私人挑礼买手 GiftMind。你的情商极高、懂生活、懂品味。
-当前用户刚回答了关于【${recipient}】的一项信息。
-请针对用户的具体回答【${ansStr}】，给出一句极其自然、懂行、有温度且让人感觉“被深刻理解”的即时点评/接话（1~2句话，35字以内）。
-要求：
-1. 绝对不要像机器人重复用户的词！要像身边的懂行朋友一样共情或点出背后的选品逻辑。
-2. 若用户提到“念想 / 精神 / 陪伴 / 回忆”，点明礼物是“承载心意与牵挂的念想载体”！
-3. 切忌自以为是添加狭隘预设，保持开放与关怀。
-4. 纯中文输出，严禁任何英文单词。
-5. 直接输出这一两句文案，不要带任何引号或解释。`
+  const systemPrompt = `你是精通挑礼艺术与生活美学的资深私人顾问 GiftMind。
+用户刚刚回答了关于【${recipient}】的一项信息：【${ansStr}】。
+请针对这个回答给出 1 句简短、自然、极具懂行感的专业点评或选品洞察（30字以内）。
+
+【极其重要的表达规则】：
+1. 绝对禁止在每句话里套用“太走心了”、“牵挂”等千篇一律的陈词滥调！
+2. 必须就事论事，给出接地气、专业懂行的生活洞察：
+   - 比如孩子安静探索：点明专注力好、拼搭/科学/绘本能沉浸大半天；
+   - 比如长辈做家务/下厨：点明省心省力、一键好上手、实用减负；
+   - 比如长辈想念/念想：点明定格全家欢聚回忆、睹物思人最暖心；
+   - 比如伴侣浪漫/仪式：点明生活小确幸、有巧思有品味；
+3. 纯中文输出，严禁任何英文单词。
+4. 直接输出这一句话，不带任何引号或解释。`
 
   const userPrompt = `受礼人：${recipient}
-场合：${occasion}
-预算：${budget}
-当前步骤：${step.messages?.[0] || step.id}
 用户本次回答：${ansStr}`
 
   // 1. 优先调用大模型实时生成
@@ -94,9 +96,9 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.75, timeout: 6000 }
+      { temperature: 0.85, timeout: 5000 }
     )
-    if (reaction && reaction.length > 4) {
+    if (reaction && reaction.length >= 4) {
       const cleanReaction = reaction.replace(/^["“”]|["“”]$/g, '').trim()
       if (!usedReactionTexts.has(cleanReaction)) {
         usedReactionTexts.add(cleanReaction)
@@ -104,33 +106,83 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
       }
     }
   } catch (err) {
-    console.log('[AI Live Reaction fallback to local knowledge base]:', err)
+    console.log('[AI Live Reaction fallback]:', err)
   }
 
-  // 2. 离线/超时兜底（带去重过滤）
-  const matched = matchLocalKnowledge(ansStr, currentAnswers)
-  if (matched?.reaction && !usedReactionTexts.has(matched.reaction)) {
-    usedReactionTexts.add(matched.reaction)
-    return matched.reaction
-  }
+  // 2. 离线/超时精准分类兜底（多维度轮换，绝无重复套话）
+  const fallback = generateSmartDiverseFallback(ansStr, recipient)
+  usedReactionTexts.add(fallback)
+  return fallback
+}
 
-  // 3. 动态情境多样化兜底（绝不重复同一句话）
-  const dynamicFallbacks = [
-    `“${ansStr}”这个细节太走心了，礼物承载的就是这种看不见却摸得着的牵挂。`,
-    `记下了！这种切身的真实心愿，往往才是挑对礼物的灵魂所在。`,
-    `这份心意真的很体贴，在选品上我们会牢牢锁定这种真实的情感分量。`,
-    `能留意到这样的日常需求，说明你对 TA 的用心程度远超一般人。`,
-    `这个方向选得极好，既有深厚的温度，又特别经得起时间推敲。`
-  ]
+function generateSmartDiverseFallback(ansStr, recipient) {
+  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝/.test(recipient)
+  const isElder = /父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶/.test(recipient)
+  const isLover = /女|妻|男|夫|对象|爱人|情侣/.test(recipient)
 
-  for (const fb of dynamicFallbacks) {
-    if (!usedReactionTexts.has(fb)) {
-      usedReactionTexts.add(fb)
-      return fb
+  let pool = []
+
+  if (isChild) {
+    if (/安静|探索|拼搭|科学|积木|阅读|绘本|太空|天文/.test(ansStr)) {
+      pool = [
+        '喜欢安静探索的孩子专注力极佳，拼搭模型或科学实验往往能让他们沉浸大半天。',
+        '这类孩子求知欲旺盛，送兼具知识性与动手乐趣的益智好物最对胃口。',
+        '从孩子着迷的兴趣切入，能让礼物长久陪伴，反复玩耍也不容易厌倦。',
+      ]
+    } else if (/动手|画|美术|黏土|手工|创造/.test(ansStr)) {
+      pool = [
+        '动手能力强的孩子想象力丰富，一套高品质的艺术创想套组最能激发灵感。',
+        '鼓励孩子自己动手创造，不仅能收获成就感，还能留下珍贵的作品。',
+      ]
+    } else if (/运动|户外|骑行|活力|探险/.test(ansStr)) {
+      pool = [
+        '充满活力爱探险的孩子，送能在大自然里探索或挥洒汗水的运动装备最过瘾。',
+        '陪孩子一起动起来，这样的礼物充满阳光与成长的活力。',
+      ]
+    } else {
+      pool = [
+        '从孩子的真实兴趣出发，选能兼顾趣味性与成长陪伴的好礼物。',
+        '摸清了孩子的爱好偏好，选品就能有的放矢，送到孩子心坎里。',
+      ]
     }
+  } else if (isElder) {
+    if (/家务|操劳|弯腰|做饭|清洁|扫|拖|繁重|辛劳/.test(ansStr)) {
+      pool = [
+        '体察到长辈日复一日的琐碎操劳，挑省时省力、一键好上手的减负好物最实在。',
+        '长辈最怕复杂难操作，选设计人性化、能真正解放双手的好帮手最贴心。',
+      ]
+    } else if (/舒缓|按摩|痛|酸|关节|骨|睡眠|理疗/.test(ansStr)) {
+      pool = [
+        '随着年纪渐长，温和深层的热敷揉捏与理疗体验最能舒缓长辈的日常疲劳。',
+        '把舒适与健康带给长辈，让他们每天睡得踏实、起居轻松，这份孝心最周到。',
+      ]
+    } else if (/念想|精神|回忆|照片|故事|陪伴/.test(ansStr)) {
+      pool = [
+        '长辈年纪大了最看重陪伴与回忆，把家人的欢聚温情定格下来，比什么礼物都暖心。',
+        '专属的回忆载体能让长辈随时翻看，这种睹物思人的踏实感最有分量。',
+      ]
+    } else {
+      pool = [
+        '摸清长辈的实际起居习惯，挑真正经久耐用、让生活更舒适的贴心好物。',
+        '给长辈选礼重在分寸与实用，这份细致考量会让方案更加稳妥。',
+      ]
+    }
+  } else if (isLover) {
+    pool = [
+      '抓住日常相处里的小心动，有巧思和生活品味的礼物最能让人眼前一亮。',
+      '送伴侣注重情绪价值与仪式感，选有质感、有专属故事的方案最为动人。',
+      '摸清了 TA 的生活调性，我们在选品上会牢牢锁定这份独特的浪漫分寸。',
+    ]
+  } else {
+    pool = [
+      '记下了这个关键细节，在选品上我们会牢牢围绕这个核心诉求来甄选。',
+      '这个方向选得很准，既体面又有生活质感，兼具实用与格调。',
+      '有了这个清晰的指引，接下来的选品方案会更具针对性。',
+    ]
   }
 
-  return `记下了「${ansStr}」，我们会把这份特别的心意融入专属方案中。`
+  fallbackCycle = (fallbackCycle + 1) % pool.length
+  return pool[fallbackCycle]
 }
 
 /**
@@ -141,8 +193,8 @@ export async function generateAiPlan(answers = {}) {
   const occasion = String(answers.occasion || '特别的日子')
   const budget = String(answers.budget || '¥300-600')
   const personality = Array.isArray(answers.personality) ? answers.personality.join('、') : String(answers.personality || '')
-  const memory = String(answers.memory || answers.story || '')
-  const feeling = String(answers.feeling || '被深深理解与关怀')
+  const memory = String(answers.memory || answers.story || answers.child_theme || answers.pain_point || '')
+  const feeling = String(answers.feeling || answers.feeling_wish || '被深深理解与关怀')
 
   // 1. 从官方 164 款商品/体验库中多维检索候选池
   const candidateGifts = retrieveCandidates(answers, 14)
@@ -156,17 +208,17 @@ ${candidateText}
 
 【选品与推荐规则】：
 1. 必须优先从上方官方商品库候选清单中挑选 3 件最契合的真实商品/体验（使用清单中的真实名称 name、价格 price、ID id）；
-2. 结合用户的具体回答与心愿痛点（如送长辈念想/陪伴，挑老照片画册/全家写真/照片打印机/舒缓体验；送伴侣挑浪漫/首饰/体验），为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
+2. 结合用户的具体回答与心愿痛点（如孩子喜欢科学探索/空间积木，挑益智模型/科学装备；长辈操劳，挑减负理疗；伴侣挑浪漫美学），为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
 3. 附上一封真挚、细腻、字字戳心的专属信件（paragraphs 3~4 段）。
 
 必须输出严格 JSON 格式：
 {
-  "title": "方案主标题（12字以内，如：为爸妈定制的心意生活提案）",
-  "subtitle": "一句话温暖副标题（如：用贴心关怀与陪伴，把牵挂化作日常的温度）",
+  "title": "方案主标题（12字以内，如：为TA定制的心意生活提案）",
+  "subtitle": "一句话温暖副标题",
   "insight": {
     "summary": "专业洞察陈述（80字左右，深入点出为什么这么选）",
-    "traits": ["体贴孝顺", "情感念想", "品质生活"],
-    "keyPoint": "选品核心逻辑（如：拒绝华而不实，直击长辈日常起居与情感陪伴）"
+    "traits": ["贴心懂行", "专属心意", "品质生活"],
+    "keyPoint": "选品核心逻辑"
   },
   "gifts": [
     {
@@ -174,23 +226,23 @@ ${candidateText}
       "name": "官方商品库中的真实名称",
       "emoji": "🎁",
       "price": "官方商品库中的价格区间（如：¥300-600）",
-      "why": "针对用户的具体情况，阐述为什么选这件礼物的深度推荐理由（40字以内）",
+      "why": "深度推荐理由（40字以内）",
       "tag": "首选推荐"
     }
   ],
   "letter": {
-    "salutation": "亲爱的爸妈：",
+    "salutation": "称呼：",
     "paragraphs": [
       "第一段内容...",
       "第二段内容...",
       "第三段内容..."
     ],
-    "signature": "—— 爱你们的孩子"
+    "signature": "落款"
   }
 }`
 
   const userPrompt = `【受礼人】：${recipient}
-【场合】：${occasion}
+【场合/契机】：${occasion}
 【预算区间】：${budget}
 【性格/偏好标签】：${personality}
 【特别细节/心愿故事】：${memory}
@@ -229,7 +281,7 @@ function sanitizePlanData(data, answers, candidateGifts = []) {
       emoji: String(g.emoji || match?.emoji || '🎁'),
       price,
       why: String(g.why || match?.short_description || '为你精选的特别心意'),
-      tag: String(g.tag || (i === 0 ? '首选推荐' : i === 1 ? '舒缓优选' : '心意好物')),
+      tag: String(g.tag || (i === 0 ? '首选推荐' : i === 1 ? '精选优选' : '心意好物')),
       kind: match?.gift_type_code || 'product',
       description: match?.short_description || '',
     }
@@ -263,11 +315,6 @@ function sanitizePlanData(data, answers, candidateGifts = []) {
       { time: '送出前', title: '提前备好', desc: '拆开外包装检查，附上亲笔手写信' },
       { time: '送出当天', title: '温暖递上', desc: '微笑着亲手递给 TA，一起开箱体验' },
     ],
-    share: {
-      greeting: '生活需要一点未知的小确幸，拆开看看吧。',
-      coverEmoji: '🎁',
-      theme: 'dawn',
-    },
     answers,
   }
 }

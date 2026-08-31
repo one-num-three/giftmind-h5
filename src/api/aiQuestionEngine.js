@@ -1,11 +1,11 @@
 /**
  * ══════════════════════════════════════════════════════════════
  *  深度 AI 动态出题引擎 (Deep AI Question Engine)
- *  —— 由顶级私人买手大模型驱动的 4~5 步步步深入对话：
- *     1. 拒绝浅薄表层提问，深入挖掘生活痛点、心愿细节与精神诉求；
- *     2. 纯中文输出，严禁任何英文，严禁张冠李戴；
- *     3. 每一步提供丰富、懂行、接地气的选项，同时支持随时自由输入；
- *     4. 4~5 步递进式自然收敛，信息充实后智能定型出方案。
+ *  —— 由顶级私人买手大模型驱动的 4~5 步深度见招拆招追问：
+ *     1. 彻底告别浅薄表层提问，顺着回答深入挖掘具体生活场景、主题偏好与心愿；
+ *     2. 所有问题均自带「✍️ 其他 / 自定义输入…」选项，用户可随时输入个性化内容；
+ *     3. 针对孩子/晚辈、长辈、伴侣等不同受礼人深度细化，不问清细节不轻易推品；
+ *     4. 纯中文输出，零英文单词，严禁张冠李戴。
  * ══════════════════════════════════════════════════════════════
  */
 import { callMiMo } from './mimoService'
@@ -18,15 +18,15 @@ export const INITIAL_STEP = {
   type: 'single',
   messages: [
     '你好呀 👋 我是 GiftMind，你的 AI 私人挑礼策划师。',
-    '我会像最懂生活的朋友一样，用几个深入的问题帮你理清头绪。\n\n先告诉我，这次想为谁挑选一份特别的心意？',
+    '我会像最懂生活的朋友一样，通过几个深入的问题帮你理清头绪。\n\n先告诉我，这次想为谁挑选一份特别的心意？',
   ],
   options: [
     { value: '父母 / 长辈', label: '父母 / 长辈', emoji: '🏡' },
+    { value: '孩子 / 晚辈', label: '孩子 / 晚辈', emoji: '🎈' },
     { value: '女朋友 / 妻子', label: '女朋友 / 妻子', emoji: '💗' },
     { value: '男朋友 / 丈夫', label: '男朋友 / 丈夫', emoji: '💙' },
     { value: '闺蜜 / 好友', label: '闺蜜 / 好友', emoji: '🤝' },
     { value: '同事 / 领导', label: '同事 / 领导', emoji: '🧑‍💼' },
-    { value: '孩子 / 晚辈', label: '孩子 / 晚辈', emoji: '🎈' },
   ],
   allowCustom: true,
   placeholder: '也可以直接告诉我 TA 是谁…',
@@ -36,18 +36,18 @@ export const INITIAL_STEP = {
 export function classifyRelationship(recipient = '') {
   const r = String(recipient || '')
   if (/父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(r)) {
-    return 'elder' // 父母长辈
+    return 'elder'
+  }
+  if (/孩|晚辈|学生|儿|女|侄|外甥|宝宝|童/.test(r)) {
+    return 'junior'
   }
   if (/女|妻|男|夫|对象|爱人|情侣|暗恋/.test(r)) {
-    return 'lover' // 伴侣/恋人
+    return 'lover'
   }
   if (/同事|领导|客户|老板|上司|下属|商务/.test(r)) {
-    return 'work' // 职场同事
+    return 'work'
   }
-  if (/孩子|晚辈|学生|儿子|女儿|侄|外甥/.test(r)) {
-    return 'junior' // 孩子晚辈
-  }
-  return 'friend' // 朋友闺蜜
+  return 'friend'
 }
 
 /** 英文选项映射表（防止大模型漏出英文） */
@@ -62,6 +62,8 @@ const EN_ZH_MAP = {
   energy: '充沛活力 / 提神醒脑',
   comfort: '起居舒适 / 贴心呵护',
   fitness: '温和锻炼 / 身体活动',
+  science: '科学探索 / 动手实验',
+  creative: '艺术创想 / 手工搭建',
 }
 
 /**
@@ -71,7 +73,7 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
   const filledKeys = Object.keys(answers).filter((k) => answers[k] !== undefined && answers[k] !== '')
   const answeredCount = filledKeys.length
 
-  // 🌟 深度收集：4~5 题充分了解用户后自然收敛（或者用户随时点击右上角看方案）
+  // 🌟 深度收集：必须经历 4~5 步深入追问，信息充分后才出方案（或用户点击右上角随时看方案）
   if (answeredCount >= 5 || stepIndex >= 5) {
     return { isReady: true }
   }
@@ -79,49 +81,27 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
   const recipient = answers.recipient || 'TA'
   const relType = classifyRelationship(recipient)
 
-  const relationshipPrompts = {
-    elder: `当前受礼人为【父母 / 长辈】。
-提问核心：
-1. 深入挖掘长辈真实生活痛点（如日常家务操劳、下厨备菜繁琐、起居舒适度、身体舒缓养生、老两口精神陪伴与念想等）；
-2. 严禁出现情人节、恋爱、宠TA等情侣词汇；
-3. 选项必须具体有画面感，贴合长辈实际生活；`,
-    lover: `当前受礼人为【恋人 / 伴侣】。
-提问核心：
-1. 深入挖掘两人相处状态、浪漫心动契机、日常小确幸、美学偏好或近期共同心愿；
-2. 避免千篇一律的俗套礼物，注重情绪共鸣与惊喜感；`,
-    work: `当前受礼人为【职场同事 / 领导 / 商务伙伴】。
-提问核心：
-1. 围绕升职调动、退休欢送、商务答谢、体面往来展开；
-2. 注重礼物的分寸感、体面度与办公生活品味；`,
-    junior: `当前受礼人为【孩子 / 晚辈】。
-提问核心：
-1. 围绕成长庆祝、考学升学、动手探索、益智科学与趣味陪伴展开；`,
-    friend: `当前受礼人为【朋友 / 闺蜜】。
-提问核心：
-1. 围绕生日聚会、乔迁新居、生活美学、默契陪伴与治愈解压展开；`,
-  }[relType]
-
   const systemPrompt = `你是精通人情世故、极具生活品味与洞察力的资深私人买手顾问 GiftMind。
-你需要像一个真正懂生活的高情商朋友一样，通过自然对话为用户挑选最适合【${recipient}】的礼物。
+你需要根据用户上一轮的回答，像一个真正懂行、有经验的专业挑礼专家一样，【步步深入追问具体的场景与细节】，切忌浅尝辄止！
 
-【核心人伦与提问原则】：
-${relationshipPrompts}
-- 纯中文输出：选项与问题必须全部为地道自然的纯中文，【严禁出现任何英文单词】！
-- 深度递进：不要停留在表层套话，要根据用户之前透露的回答不断向下深挖具体场景、痛点、故事或期望感受！
+【深度追问指导原则】：
+1. 若送【孩子/晚辈】：
+   - 如果用户提到“安静探索型 / 动手型 / 科学”，下一问必须深挖具体兴趣方向（如科学实验、空间积木、手工绘画、科普绘本）或希望培养的能力；
+   - 绝不要刚问了一个词就草率收尾！
+2. 若送【父母/长辈】：
+   - 深入追问是弯腰清洁地面、一日三餐下厨繁重，还是颈椎腰背酸痛，抑或是想念孩子需要精神陪伴；
+3. 若送【伴侣/朋友】：
+   - 深入追问相处节奏、美学调性与共同回忆；
+4. 【纯中文规范】：所有问题和选项必须为地道流畅的纯中文，【严禁出现任何英文单词】！
+5. 必须提供 4~5 个具体生动的中文选项 options，并且全部支持用户自定义输入。
 
 【当前已知信息】：
 ${JSON.stringify(answers, null, 2)}
 
-【任务】：
-根据当前对话进展，提出下一道最具启发性、最能挖掘真实细节的深度问题。
-1. 提供 4~5 个极具代表性、具体生动的中文选项 options（包含 value, label, emoji）。
-2. 支持自由输入 placeholder。
-3. 若觉得信息已足够丰富（已涵盖核心诉求、偏好、预算），可返回 is_ready: true。
-
 必须输出严格 JSON 格式：
 {
-  "question": "深度针对性提问（纯中文，亲切自然）",
-  "key": "收集字段名（如 pain_point / lifestyle / memory / feeling / budget / format）",
+  "question": "深度针对性提问（亲切自然，具有启发性）",
+  "key": "收集字段名（如 child_interest / detail_scenario / memory_wish / budget_form）",
   "stage": "discover / preference / story / shape",
   "type": "single 或者 multi 或者 text",
   "options": [
@@ -133,12 +113,12 @@ ${JSON.stringify(answers, null, 2)}
   "is_ready": false
 }`
 
-  const userPrompt = `送礼对象：${recipient}
-当前步数：第 ${stepIndex + 1} 题（目标共 4-5 题）
+  const userPrompt = `受礼人：${recipient}
+当前步数：第 ${stepIndex + 1} 题（目标共 5 题，请继续深入挖掘）
 最新回答记录：
 ${historyMessages.slice(-6).map((m) => `${m.role}: ${m.text}`).join('\n')}
 
-请生成下一道深度问题：`
+请生成下一道更深度的追问：`
 
   try {
     const raw = await callMiMo(
@@ -146,7 +126,7 @@ ${historyMessages.slice(-6).map((m) => `${m.role}: ${m.text}`).join('\n')}
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      { temperature: 0.7, jsonMode: true, timeout: 8000 }
+      { temperature: 0.75, jsonMode: true, timeout: 8000 }
     )
 
     const parsed = JSON.parse(raw)
@@ -173,7 +153,7 @@ function sanitizeAiStep(raw, answers, stepIndex) {
   const stage = ['discover', 'preference', 'story', 'shape'].includes(raw.stage) ? raw.stage : 'preference'
   const type = ['single', 'multi', 'text'].includes(raw.type) ? raw.type : 'single'
 
-  const question = String(raw.question || '').trim() || '我们继续聊聊 TA 的生活细节与心愿～'
+  const question = String(raw.question || '').trim() || '我们继续深入聊聊 TA 的生活细节与心愿～'
   const messages = [question]
 
   // 保证 options 安全且每个都是纯正中文
@@ -214,86 +194,199 @@ function sanitizeAiStep(raw, answers, stepIndex) {
     type,
     messages,
     options,
-    allowCustom: raw.allow_custom !== false,
-    placeholder: String(raw.placeholder || '自由输入补充细节…'),
+    allowCustom: true,
+    placeholder: String(raw.placeholder || '其他想法 / 也可以直接输入…'),
     skippable: raw.skippable !== false,
     isReady: false,
   }
 }
 
 /**
- * 深度兜底题库（步步深入，4 步覆盖全面）
+ * 深度兜底题库（步步深入，多层次挖掘）
  */
 function getAdaptiveFallbackStep(answers, stepIndex) {
   const recipient = answers.recipient || 'TA'
   const rel = classifyRelationship(recipient)
 
-  if (stepIndex === 1) {
-    // 第 2 题：深挖生活痛点与日常场景
-    if (rel === 'elder') {
+  // ── 孩子/晚辈 专属深度路径 ──
+  if (rel === 'junior') {
+    if (stepIndex === 1) {
       return {
-        id: 'fallback_elder_pain',
+        id: 'child_step_1_trait',
+        stage: 'discover',
+        key: 'child_trait',
+        type: 'single',
+        messages: ['这个礼物是送给多大年龄的孩子？平时 TA 最着迷、最能沉下心玩的是哪一类？'],
+        options: [
+          { value: '安静专注型 / 喜欢拼搭、科学探索与阅读', label: '安静探索 / 拼搭与阅读', emoji: '🔬' },
+          { value: '动手创造型 / 喜欢美术手工、画画黏土', label: '动手创造 / 美术与手工', emoji: '🎨' },
+          { value: '活力运动型 / 喜欢户外探险、骑行运动', label: '活力运动 / 户外与探险', emoji: '🏃' },
+          { value: '潮玩动漫型 / 喜欢流行IP、公仔模型收藏', label: '潮玩模型 / 流行IP收藏', emoji: '🤖' },
+        ],
+        allowCustom: true,
+        placeholder: '也可以直接告诉我孩子的具体年龄和爱好…',
+      }
+    }
+    if (stepIndex === 2) {
+      return {
+        id: 'child_step_2_deep_theme',
+        stage: 'preference',
+        key: 'child_theme',
+        type: 'single',
+        messages: ['在具体方向上，你更希望送一份偏重哪种体验或能力的礼物？孩子最近有没有心心念念的小心愿？'],
+        options: [
+          { value: '科学求知 / 激发探索欲的天文、实验或机械玩具', label: '科学探索 / 激发求知欲', emoji: '🔭' },
+          { value: '空间建构 / 锻炼逻辑与耐心的精品拼搭积木', label: '空间积木 / 锻炼耐心逻辑', emoji: '🧱' },
+          { value: '美育熏陶 / 启发想象力的精装绘本或艺术套组', label: '绘本美育 / 启发想象力', emoji: '📚' },
+          { value: '纯粹惊喜 / 圆孩子一个心愿的专属心爱好物', label: '心愿礼物 / 带来巨大惊喜', emoji: '🎁' },
+        ],
+        allowCustom: true,
+        placeholder: '可以写写孩子最近念叨过的具体愿望…',
+      }
+    }
+    if (stepIndex === 3) {
+      return {
+        id: 'child_step_3_feeling',
+        stage: 'story',
+        key: 'feeling_wish',
+        type: 'single',
+        messages: ['送出这份礼物时，你最期待看到孩子的什么反应？'],
+        options: [
+          { value: '兴奋欢呼，迫不及待马上拆开动手玩起来', label: '兴奋欢呼，立马玩起来', emoji: '🎉' },
+          { value: '爱不释手，能长久陪伴、反复探索不厌烦', label: '爱不释手，长久陪伴', emoji: '⭐' },
+          { value: '感到被重视和鼓励，建立自信与成就感', label: '受到鼓励，收获成就感', emoji: '🏆' },
+        ],
+        allowCustom: true,
+      }
+    }
+    return {
+      id: 'child_step_4_budget',
+      stage: 'shape',
+      key: 'budget',
+      type: 'single',
+      messages: ['最后确认一下预算与形式偏好，我来从官方正品库中为你精挑细选：'],
+      options: [
+        { value: '¥100–300 轻巧心意益智好物', label: '¥100–300 精巧心意款', emoji: '🌱' },
+        { value: '¥300–600 品质进阶大套组', label: '¥300–600 品质大套组', emoji: '✨' },
+        { value: '¥600–1200 标杆重磅成长大礼', label: '¥600–1200 标杆成长礼', emoji: '👑' },
+      ],
+      allowCustom: true,
+    }
+  }
+
+  // ── 父母/长辈 专属深度路径 ──
+  if (rel === 'elder') {
+    if (stepIndex === 1) {
+      return {
+        id: 'elder_step_1_scenario',
         stage: 'discover',
         key: 'pain_point',
         type: 'single',
         messages: ['在父母/长辈的日常生活中，你最想帮他们改善或分担的是哪一类具体场景？'],
         options: [
-          { value: '家务操劳 / 弯腰清洁与备菜做饭繁琐', label: '家务清洁 / 弯腰拖地下厨操劳', emoji: '🧹' },
-          { value: '身体舒缓 / 日常容易疲惫需要放松', label: '身体舒缓 / 日常放松呵护', emoji: '💆' },
-          { value: '精神陪伴 / 想要生活有点温暖念想', label: '精神陪伴 / 温暖念想回忆', emoji: '📷' },
-          { value: '食疗滋补 / 养生调理与起居舒适', label: '食疗滋补 / 养生起居舒适', emoji: '🍵' },
+          { value: '家务操劳 / 弯腰拖地与做饭备菜繁重', label: '家务操劳 / 弯腰清洁与备菜', emoji: '🧹' },
+          { value: '身体舒缓 / 颈椎腰背酸痛容易疲累', label: '身体舒缓 / 颈椎腰背放松', emoji: '💆' },
+          { value: '精神念想 / 老照片回忆与陪伴挂念', label: '精神念想 / 专属回忆陪伴', emoji: '📷' },
+          { value: '食疗滋补 / 养生调理与起居舒适', label: '食疗滋补 / 起居生活舒适', emoji: '🍵' },
         ],
         allowCustom: true,
         placeholder: '也可以直接写长辈平时最操劳或最需要的事…',
       }
     }
+    if (stepIndex === 2) {
+      return {
+        id: 'elder_step_2_detail',
+        stage: 'preference',
+        key: 'detail_need',
+        type: 'single',
+        messages: ['针对这个需求，你希望这份礼物如何真正帮到他们？长辈平时最容易忽略自己的什么地方？'],
+        options: [
+          { value: '真正减负省力，一键操作不费劲，把双手解放出来', label: '一键好上手，省心省力', emoji: '🛋️' },
+          { value: '温热揉捏，深层驱散疲劳，改善睡眠和身体舒适度', label: '温热舒缓，提升睡眠舒适', emoji: '🌿' },
+          { value: '定格一家人温情，把回忆翻印成册随时看一看', label: '定格温情，睹物思人留念想', emoji: '🖼️' },
+        ],
+        allowCustom: true,
+        placeholder: '可以补充长辈平时的生活习惯或脾气…',
+      }
+    }
+    if (stepIndex === 3) {
+      return {
+        id: 'elder_step_3_feeling',
+        stage: 'story',
+        key: 'feeling',
+        type: 'single',
+        messages: ['长辈拆开礼物时，你最希望他们体会到的是什么？'],
+        options: [
+          { value: '觉得孩子真的长大了、懂事又心疼父母', label: '懂得心疼父母，踏实温暖', emoji: '🧣' },
+          { value: '觉得家里添了一件特别实用省心的好东西', label: '实用耐用，舍得天天用', emoji: '👍' },
+          { value: '感动欣慰，深深感受到被挂念与陪伴', label: '深深被挂念，欣慰感动', emoji: '🥹' },
+        ],
+        allowCustom: true,
+      }
+    }
     return {
-      id: 'fallback_lover_scene',
+      id: 'elder_step_4_budget',
+      stage: 'shape',
+      key: 'budget',
+      type: 'single',
+      messages: ['在礼物形式与预算上，你期望的核心发力点在哪里？'],
+      options: [
+        { value: '¥100–300 贴心小件心意好物', label: '¥100–300 贴心小件', emoji: '🌱' },
+        { value: '¥300–600 黄金品质实用大件', label: '¥300–600 实用大件', emoji: '✨' },
+        { value: '¥600–1200 尊享体面重磅关怀', label: '¥600–1200 尊享关怀', emoji: '🎁' },
+        { value: '线下推拿/理疗/温泉放松体验', label: '线下理疗体验', emoji: '🧖' },
+      ],
+      allowCustom: true,
+    }
+  }
+
+  // ── 通用/伴侣路径 ──
+  if (stepIndex === 1) {
+    return {
+      id: 'common_step_1',
       stage: 'discover',
       key: 'occasion_scene',
       type: 'single',
       messages: [`这次给【${recipient}】选礼，最核心的契机或心愿是什么？`],
       options: [
-        { value: '特别日子庆祝（生日 / 纪念日 / 节日）', label: '特别节日 / 生日纪念', emoji: '🎂' },
-        { value: '日常浪漫小确幸（想宠 TA 带来惊喜）', label: '日常小确幸 / 浪漫惊喜', emoji: '✨' },
-        { value: '心意表达（感谢陪伴 / 缓和关系 / 道歉）', label: '心意表达 / 感谢与弥补', emoji: '💌' },
-        { value: '实用升级（帮 TA 解决某个具体生活需求）', label: '实用升级 / 解决需求', emoji: '🛋️' },
+        { value: '特别节日或生日庆祝', label: '特别节日 / 生日纪念', emoji: '🎂' },
+        { value: '日常浪漫小确幸', label: '日常小确幸 / 浪漫心意', emoji: '✨' },
+        { value: '感谢陪伴或弥补遗憾', label: '感谢陪伴 / 弥补遗憾', emoji: '💌' },
+        { value: '实用升级品质生活', label: '实用升级 / 提升品质', emoji: '🛋️' },
       ],
       allowCustom: true,
     }
   }
 
   if (stepIndex === 2) {
-    // 第 3 题：深挖精神诉求与期望感受
     return {
-      id: 'fallback_feeling_story',
-      stage: 'story',
-      key: 'memory_feeling',
+      id: 'common_step_2',
+      stage: 'preference',
+      key: 'style_preference',
       type: 'single',
-      messages: ['TA 拆开礼物那一刻，你最希望 TA 心里涌起什么样的感受？或者 TA 最近提过什么心愿？'],
+      messages: ['TA 的生活调性或审美风格，更接近哪一种？'],
       options: [
-        { value: '被深深理解与体贴照顾，觉得特别踏实温暖', label: '被深深理解，觉得温暖踏实', emoji: '🧣' },
-        { value: '眼前一亮，体验到从未试过的全新生活品质', label: '眼前一亮，惊喜万分', emoji: '🎉' },
-        { value: '睹物思人，每次看到都能感受到满满的陪伴与牵挂', label: '睹物思人，感受到满满牵挂', emoji: '📷' },
-        { value: '纯粹的开怀大笑，感到轻松愉悦无负担', label: '轻松愉悦，纯粹开怀大笑', emoji: '😄' },
+        { value: '极简实用 / 注重质感与效率', label: '极简实用 / 注重质感', emoji: '◻️' },
+        { value: '浪漫走心 / 喜欢仪式感与专属纪念', label: '浪漫走心 / 仪式感纪念', emoji: '💍' },
+        { value: '热爱生活 / 美食咖啡与居家治愈', label: '居家治愈 / 美食与生活', emoji: '🕯️' },
+        { value: '潮流户外 / 爱运动与新鲜体验', label: '潮流户外 / 新鲜体验', emoji: '⛰️' },
       ],
       allowCustom: true,
-      placeholder: '可以写写 TA 最近念叨过的心愿或你们的回忆…',
+      placeholder: '或者写写 TA 平时的特别喜好…',
     }
   }
 
-  // 第 4 题：预算与呈现形式
   return {
-    id: 'fallback_budget_format',
+    id: 'common_step_3',
     stage: 'shape',
     key: 'budget',
     type: 'single',
-    messages: ['在礼物形式与预算上，你期望的核心发力点在哪里？'],
+    messages: ['预算大概在什么范围？'],
     options: [
-      { value: '¥100–300 轻盈心意好物', label: '¥100–300 轻盈小而美', emoji: '🌱' },
-      { value: '¥300–600 黄金品质大件', label: '¥300–600 黄金品质款', emoji: '✨' },
-      { value: '¥600–1200 尊享体面重礼', label: '¥600–1200 尊享重礼', emoji: '🎁' },
-      { value: '沉浸式体验 / 线下放松方案', label: '线下体验 / 舒缓放松', emoji: '🧖' },
+      { value: '¥100–300', label: '¥100–300', emoji: '🌱' },
+      { value: '¥300–600', label: '¥300–600', emoji: '✨' },
+      { value: '¥600–1200', label: '¥600–1200', emoji: '🎁' },
+      { value: '¥1200 以上', label: '¥1200 以上', emoji: '👑' },
     ],
     allowCustom: true,
   }
@@ -301,6 +394,14 @@ function getAdaptiveFallbackStep(answers, stepIndex) {
 
 function getDefaultDeepOptions(recipient, stepIndex) {
   const rel = classifyRelationship(recipient)
+  if (rel === 'junior') {
+    return [
+      { value: '科学探索 / 益智拼搭', label: '科学探索 / 益智拼搭', emoji: '🔬' },
+      { value: '艺术手工 / 美育启蒙', label: '艺术手工 / 美育启蒙', emoji: '🎨' },
+      { value: '户外运动 / 活力探险', label: '户外运动 / 活力探险', emoji: '🏃' },
+      { value: '潮玩模型 / 流行好物', label: '潮玩模型 / 流行好物', emoji: '🤖' },
+    ]
+  }
   if (rel === 'elder') {
     return [
       { value: '家务减负 / 实用智能好物', label: '家务减负 / 实用省心', emoji: '🧹' },
