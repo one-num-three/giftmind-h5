@@ -9,6 +9,7 @@
  * ══════════════════════════════════════════════════════════════
  */
 import { retrieveCandidates, formatCandidatesForPrompt } from './catalogService'
+import { classifyRelationship } from '@/utils/relationship'
 
 const MIMO_API_KEY = 'sk-cvqx5j4irwxdbv0lmlggjd9md013lndoplm6rkl0qm9vbh65'
 const MIMO_MODEL = 'mimo-v2.5' // 经济型标准模型，测试成本低
@@ -85,11 +86,32 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
 }
 
 function generateSmartDiverseFallback(ansStr, recipient) {
-  const isChild = /孩|晚辈|学生|儿|女|侄|外甥|童|宝|弟|妹/.test(recipient)
-  const isElder = /父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(recipient)
-  const isLover = /女|妻|男|夫|对象|爱人|情侣/.test(recipient)
+  const rel = classifyRelationship(recipient || ansStr)
+  const isChild = rel === 'junior'
+  const isElder = rel === 'elder'
+  const isLover = rel === 'lover'
 
   let pool = []
+
+  // 1. 第一题身份确认时的专属温暖接话
+  if (/女朋友|妻子|老婆|女友/.test(ansStr)) {
+    return '为心爱的她挑选礼物，最珍贵的是那份被放在心上的细腻与专属感～'
+  }
+  if (/男朋友|丈夫|老公|男友/.test(ansStr)) {
+    return '为心爱的他挑选礼物，兼具高质感、实用性与专属仪式感的礼物最能戳中他的心～'
+  }
+  if (/父母|长辈|妈妈|爸爸/.test(ansStr)) {
+    return '给长辈选礼最见孝心，挑真正省心耐用、让起居更舒适的贴心好物最实在～'
+  }
+  if (/孩子|晚辈|宝宝/.test(ansStr)) {
+    return '给孩子挑礼物，兼具趣味性、探索欲与成长陪伴的好物最能让TA开心～'
+  }
+  if (/闺蜜|好友/.test(ansStr)) {
+    return '给懂你的好朋友选礼，有默契、有生活美学的小心意最能带来惊喜～'
+  }
+  if (/同事|领导/.test(ansStr)) {
+    return '职场送礼重在得体分寸，既有生活品质感又不会带来人情负担～'
+  }
 
   if (isChild) {
     if (/潮玩|公仔|盲盒|手办|玩偶|ip|模型|高达|动漫|二次元/.test(ansStr)) {

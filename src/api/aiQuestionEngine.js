@@ -9,6 +9,9 @@
  * ══════════════════════════════════════════════════════════════
  */
 import { callMiMo } from './mimoService'
+import { classifyRelationship } from '@/utils/relationship'
+
+export { classifyRelationship }
 
 /** 初始第一题（0 延迟秒开，建立受礼人身份） */
 export const INITIAL_STEP = {
@@ -30,24 +33,6 @@ export const INITIAL_STEP = {
   ],
   allowCustom: true,
   placeholder: '也可以直接告诉我 TA 是谁…',
-}
-
-/** 关系类型分类器 */
-export function classifyRelationship(recipient = '') {
-  const r = String(recipient || '')
-  if (/父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(r)) {
-    return 'elder'
-  }
-  if (/孩|晚辈|学生|儿|女|侄|外甥|宝宝|童|弟|妹/.test(r)) {
-    return 'junior'
-  }
-  if (/女|妻|男|夫|对象|爱人|情侣|暗恋/.test(r)) {
-    return 'lover'
-  }
-  if (/同事|领导|客户|老板|上司|下属|商务/.test(r)) {
-    return 'work'
-  }
-  return 'friend'
 }
 
 /** 英文选项映射表 */

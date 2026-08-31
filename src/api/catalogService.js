@@ -8,6 +8,7 @@
  * ══════════════════════════════════════════════════════════════
  */
 import OFFICIAL_GIFTS from '../data/officialGifts.json'
+import { classifyRelationship } from '@/utils/relationship'
 
 /** 关系标签映射 */
 const RECIPIENT_TYPE_MAP = {
@@ -23,16 +24,7 @@ const RECIPIENT_TYPE_MAP = {
  */
 export function retrieveCandidates(answers = {}, maxCandidates = 14) {
   const recipient = String(answers.recipient || '')
-  let relCategory = 'friend'
-  if (/父|母|长辈|爸|妈|老两口|公公|婆婆|爷爷|奶奶|姥/.test(recipient)) {
-    relCategory = 'elder'
-  } else if (/孩|晚辈|学生|儿|女|侄|外甥|宝|童|弟|妹/.test(recipient)) {
-    relCategory = 'junior'
-  } else if (/女|妻|男|夫|爱人|对象|情侣/.test(recipient)) {
-    relCategory = 'lover'
-  } else if (/同事|领导|商务|客户|老板/.test(recipient)) {
-    relCategory = 'work'
-  }
+  const relCategory = classifyRelationship(recipient)
 
   const targetRecipientTags = RECIPIENT_TYPE_MAP[relCategory] || ['friend']
   const budget = String(answers.budget || '')
