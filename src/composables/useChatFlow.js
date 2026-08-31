@@ -7,7 +7,8 @@
  *    2. 支持【⚡ 极速 (Fast)】与【☕ 沉浸 (Slow)】两种打字与节奏速率自由切换；
  *    3. MiMo / DeepSeek 智能模型动态追问；
  *    4. 稳定不卡顿、文字全部打完后选项气泡弹性出现；
- *    5. 支持随时一键跳过直接出方案（quickFinish）。
+ *    5. 彻底防止草稿残余文字卡死；
+ *    6. 支持随时一键跳过直接出方案（quickFinish）。
  * ══════════════════════════════════════════════════════════════
  */
 import { onMounted, onUnmounted, ref } from 'vue'
@@ -58,8 +59,8 @@ export function useChatFlow() {
     if (!clean) return true
 
     const isFast = speedMode.value === 'fast'
-    const charDelay = isFast ? 4 : 18
-    const pauseDelay = isFast ? 12 : 36
+    const charDelay = isFast ? 3 : 18
+    const pauseDelay = isFast ? 10 : 36
 
     // 1. 创建流式消息气泡
     const msg = session.pushMessage({ role: 'ai', text: '', stepId, streaming: true })
@@ -75,7 +76,7 @@ export function useChatFlow() {
     }
 
     msg.streaming = false
-    await delay(isFast ? 40 : 100)
+    await delay(isFast ? 30 : 80)
     return true
   }
 
@@ -90,7 +91,7 @@ export function useChatFlow() {
       if (!isRunValid(runId)) return false
       await streamSingleMessage(msgs[i], stepId, runId)
       if (i < msgs.length - 1) {
-        await delay(isFast ? 80 : 200)
+        await delay(isFast ? 60 : 180)
       }
     }
     return true
@@ -115,7 +116,7 @@ export function useChatFlow() {
     typing.value = true
     await streamSingleMessage(FINISH_TEXT, DONE_TAG, runId)
     typing.value = false
-    await delay(400)
+    await delay(350)
     if (!isRunValid(runId)) return
     router.replace('/summary')
   }
@@ -131,7 +132,7 @@ export function useChatFlow() {
         const reactionText = await getLiveReaction(lastAnsweredStep, lastAnswerValue, session.answers)
         if (isRunValid(runId) && reactionText) {
           await streamSingleMessage(reactionText, `${lastAnsweredStep.id}_reaction`, runId)
-          await delay(speedMode.value === 'fast' ? 50 : 120)
+          await delay(speedMode.value === 'fast' ? 40 : 100)
         }
       } catch (err) {
         console.warn('Reaction error:', err)
@@ -166,7 +167,7 @@ export function useChatFlow() {
       for (const m of nextStep.messages) {
         if (!isRunValid(runId)) break
         await streamSingleMessage(m, nextStep.id, runId)
-        await delay(speedMode.value === 'fast' ? 60 : 120)
+        await delay(speedMode.value === 'fast' ? 50 : 100)
       }
     }
 
@@ -213,10 +214,12 @@ export function useChatFlow() {
 
   /* ── 进场 ─────────────────────────────────────── */
   async function boot() {
-    if (!session.messages.length && !session.id && session.hasDraft()) {
+    if (session.stepIndex === 0) {
+      session.start(true)
+    } else if (!session.messages.length && session.hasDraft()) {
       session.restoreDraft()
+      session.start(false)
     }
-    session.start(false)
 
     const runId = startNewRun()
     if (session.isFinished) {
@@ -226,11 +229,16 @@ export function useChatFlow() {
     const step = session.currentStep || INITIAL_STEP
     if (!step) return
 
-    const asked = session.messages.some((m) => m.role === 'ai' && m.stepId === step.id)
-    if (asked) {
+    // 检查当前题是否所有消息都已经完整展示过
+    const currentStepMessages = session.messages.filter((m) => m.role === 'ai' && m.stepId === step.id)
+    const expectedCount = (step.messages || []).length
+    if (currentStepMessages.length >= expectedCount && expectedCount > 0) {
       typing.value = false
       return
     }
+
+    // 如果未完整展示（比如残余的单字碎片），清空当前题残余，干净打字输出
+    session.messages = session.messages.filter((m) => m.stepId !== step.id)
 
     typing.value = true
     await emitMessages(step.messages, step.id, runId)

@@ -15,7 +15,7 @@ const RECOVERY_FIELDS = new Set(['budget', 'timing'])
 export const useSessionStore = defineStore('session', {
   state: () => ({
     id: '',
-    messages: [], // { id, role: 'ai'|'user'|'system', text, at, stepId }
+    messages: [], // { id, role: 'ai'|'user'|'system', text, at, stepId, streaming }
     answers: {},
     stepIndex: 0,
     status: 'idle', // idle | asking | waiting | done
@@ -47,7 +47,7 @@ export const useSessionStore = defineStore('session', {
 
   actions: {
     start(fresh = true) {
-      if (fresh || !this.id) {
+      if (fresh || !this.id || this.stepIndex === 0) {
         this.id = uid('sess')
         this.messages = []
         this.answers = {}
@@ -155,11 +155,17 @@ export const useSessionStore = defineStore('session', {
     },
 
     persistDraft() {
+      // 存储时剔除未完成的流式状态
+      const cleanMessages = this.messages.map((m) => ({
+        ...m,
+        streaming: false,
+      }))
+
       storage.setJSON(DRAFT_KEY, {
         id: this.id,
         answers: this.answers,
         stepIndex: this.stepIndex,
-        messages: this.messages,
+        messages: cleanMessages,
         startedAt: this.startedAt,
         activeDynamicStep: this.activeDynamicStep,
         isAiReady: this.isAiReady,
@@ -168,14 +174,20 @@ export const useSessionStore = defineStore('session', {
 
     restoreDraft() {
       const d = storage.getJSON(DRAFT_KEY, null)
-      if (!d?.id) return false
-      Object.assign(this, d, { status: 'asking' })
+      if (!d?.id || !d.stepIndex) return false
+      
+      const restored = {
+        ...d,
+        messages: (d.messages || []).map((m) => ({ ...m, streaming: false })),
+        status: 'asking',
+      }
+      Object.assign(this, restored)
       return true
     },
 
     hasDraft() {
       const d = storage.getJSON(DRAFT_KEY, null)
-      return Boolean(d?.stepIndex)
+      return Boolean(d?.id && d?.stepIndex > 0)
     },
   },
 })
