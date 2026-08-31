@@ -20,6 +20,11 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5173,
       proxy: {
+        '/mimo-proxy': {
+          target: 'https://api.xiaomimimo.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/mimo-proxy/, ''),
+        },
         // 真实后端联调时打开：把 /api 代理到网关，避免跨域
         '/api': {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000',

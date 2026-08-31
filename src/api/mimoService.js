@@ -11,7 +11,6 @@ import { matchLocalKnowledge } from './localKnowledgeBase'
 import { retrieveCandidates, formatCandidatesForPrompt } from './catalogService'
 
 const MIMO_API_KEY = 'sk-cvqx5j4irwxdbv0lmlggjd9md013lndoplm6rkl0qm9vbh65'
-const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1'
 const MIMO_MODEL = 'mimo-v2.5' // 经济型标准模型，测试成本低
 
 /** 全局会话已展示点评历史（防止在同一会话中重复） */
@@ -19,41 +18,50 @@ const usedReactionTexts = new Set()
 let fallbackCycle = 0
 
 /**
- * 基础请求封装（直连大模型接口）
+ * 基础请求封装（同源代理优先，消除浏览器 CORS 限制）
  */
 export async function callMiMo(messages, { temperature = 0.7, jsonMode = false, timeout = 12000 } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
 
+  const isBrowser = typeof window !== 'undefined' && window.location?.hostname
+  const endpoints = isBrowser
+    ? ['/mimo-proxy/v1/chat/completions', 'https://api.xiaomimimo.com/v1/chat/completions']
+    : ['https://api.xiaomimimo.com/v1/chat/completions']
+
+  const body = {
+    model: MIMO_MODEL,
+    messages,
+    temperature,
+  }
+  if (jsonMode) {
+    body.response_format = { type: 'json_object' }
+  }
+
   try {
-    const body = {
-      model: MIMO_MODEL,
-      messages,
-      temperature,
-    }
-    if (jsonMode) {
-      body.response_format = { type: 'json_object' }
-    }
+    let lastErr = null
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${MIMO_API_KEY}`,
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        })
 
-    const res = await fetch(`${MIMO_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${MIMO_API_KEY}`,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-
-    if (!res.ok) {
-      const errText = await res.text()
-      console.warn(`[AI API Error ${res.status}]:`, errText)
-      throw new Error(`AI HTTP ${res.status}`)
+        if (res.ok) {
+          const data = await res.json()
+          const content = data?.choices?.[0]?.message?.content || ''
+          return content.trim()
+        }
+      } catch (err) {
+        lastErr = err
+      }
     }
-
-    const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content || ''
-    return content.trim()
+    throw lastErr || new Error('All AI endpoints failed')
   } finally {
     clearTimeout(timer)
   }
