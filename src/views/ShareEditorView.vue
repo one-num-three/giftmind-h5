@@ -73,8 +73,11 @@ onMounted(() => {
   const answers = found.answers && typeof found.answers === 'object' ? found.answers : {}
 
   form.theme = THEMES.includes(share.theme) ? share.theme : 'dawn'
-  // answers.recipient 形如「女朋友 / 妻子」，取斜杠前的一段当默认称呼
-  form.recipient = (text(answers.recipient).split('/')[0] || '').trim().slice(0, 12)
+  const rawRecipient = (text(answers.recipient).split('/')[0] || '').trim()
+  const defaultRec = rawRecipient.includes('男') || rawRecipient.includes('女') || rawRecipient.includes('妻') || rawRecipient.includes('夫')
+    ? '亲爱的'
+    : (rawRecipient || '你')
+  form.recipient = text(share.recipient) || defaultRec
   form.greeting = text(share.greeting).slice(0, GREETING_MAX)
   form.coverEmoji = text(share.coverEmoji) || '🎁'
   form.signature = '爱你的我'
@@ -163,7 +166,7 @@ async function copyLink() {
 
 async function copyWechatPass() {
   if (!shareUrl.value) return
-  const pass = `🎁【来自 ${previewRecipient.value || '你'} 的专属心意盲盒】\n“生活偶尔需要一点盲盒带来的小确幸。这里有一份为你定制的神秘心意，点开开启拆盒时刻 👉 ${shareUrl.value}”`
+  const pass = `🎁【送给 ${previewRecipient.value || '你'} 的专属心意盲盒】\n“生活偶尔需要一点盲盒带来的小确幸。这里有一份为你定制的神秘心意，点开开启拆盒时刻 👉 ${shareUrl.value}”`
   try {
     const ok = await copyText(pass)
     if (ok) ui.success('微信神仙口令已复制，直接发到微信聊天框吧！')

@@ -151,20 +151,20 @@ export async function shuffleGifts(planId, { exclude = [], answers } = {}) {
 }
 
 export async function createShare(planId, config = {}) {
-  await delay(600)
+  await delay(400)
   const record = createLocalShare(planId, config)
-  return { ...record, url: `${location.origin}${location.pathname}#/s/${record.shareId}` }
+  return record
 }
 
 export async function updateShare(shareId, plan, config = {}) {
-  await delay(400)
+  await delay(300)
   const record = updateLocalShare(shareId, plan, config)
-  return { ...record, url: `${location.origin}${location.pathname}#/s/${record.shareId}` }
+  return record
 }
 
-export async function fetchShare(shareId) {
-  await delay(400)
-  return fetchLocalShare(shareId)
+export async function fetchShare(shareId, d = '') {
+  await delay(200)
+  return fetchLocalShare(shareId, d)
 }
 
 export async function sendShareReply(shareId, content) {

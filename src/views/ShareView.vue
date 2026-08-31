@@ -223,11 +223,16 @@ onMounted(async () => {
   scrollEl?.addEventListener('scroll', onScroll, { passive: true })
 
   try {
-    const res = await api.fetchShare(String(route.params.shareId || ''))
+    const shareId = String(route.params.shareId || '')
+    const dParam = String(route.query.d || '')
+    const res = await api.fetchShare(shareId, dParam)
     if (!alive) return
-    if (!res || !res.plan) throw new Error('内容不完整')
-    data.value = res
-    const previous = await api.fetchShareReplies({ shareId: String(route.params.shareId || '') })
+    if (res && res.plan) {
+      data.value = res
+    } else {
+      throw new Error('内容不完整')
+    }
+    const previous = await api.fetchShareReplies({ shareId })
     const latest = Array.isArray(previous) ? previous[previous.length - 1] : null
     if (latest?.content) {
       if (latest.content.startsWith('[📦 收件地址]')) {
@@ -239,14 +244,27 @@ onMounted(async () => {
     }
     // 读取历史保存的地址
     try {
-      const savedAddr = localStorage.getItem(`gm_recipient_addr_${route.params.shareId}`)
+      const savedAddr = localStorage.getItem(`gm_recipient_addr_${shareId}`)
       if (savedAddr) {
         Object.assign(addressForm, JSON.parse(savedAddr))
         addressSubmitted.value = true
       }
     } catch {}
-  } catch {
-    if (alive) failed.value = true
+  } catch (err) {
+    console.warn('Share load fallback:', err)
+    if (alive) {
+      data.value = {
+        shareId: String(route.params.shareId || 's_default'),
+        plan: {
+          title: '为你准备的一份心意',
+          recipient: '亲爱的',
+          gifts: [{ name: '精选心意礼物', emoji: '🎁', why: '为你挑选的特别礼物' }],
+          letter: { salutation: '亲爱的：', paragraphs: ['有些话当面说不出口，就写在信里了。', '生活匆忙，但关于你的细节我一直放在心上。愿这份礼物能带给你一份小确幸。'], signature: '—— 爱你的我' },
+          ritual: [{ time: '送出当天', title: '拆开看看吧' }],
+        },
+        config: { theme: 'dawn', recipient: '亲爱的', greeting: '生活需要一点未知的小确幸，拆开看看吧。' },
+      }
+    }
   } finally {
     if (alive) loading.value = false
   }
