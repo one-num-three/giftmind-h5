@@ -53,6 +53,8 @@ export async function callMiMo(messages, { temperature = 0.7, jsonMode = false, 
   }
 }
 
+import { matchLocalKnowledge } from './localKnowledgeBase'
+
 /**
  * 痛点 1 核心实现：每道题提交后的 AI 实时懂行接话与情绪共鸣（Live Reaction）
  */
@@ -93,7 +95,13 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
       return reaction.replace(/^["“”]|["“”]$/g, '')
     }
   } catch (err) {
-    console.log('[MiMo Live Reaction fallback to rule matrix]:', err)
+    console.log('[MiMo Live Reaction fallback to local knowledge base]:', err)
+  }
+
+  // 22 套正则底层专家知识库精准匹配
+  const matched = matchLocalKnowledge(ansStr, currentAnswers)
+  if (matched?.reaction) {
+    return matched.reaction
   }
 
   // 极速高情商本地兜底矩阵（0 延迟，保证永远不会卡住用户）
