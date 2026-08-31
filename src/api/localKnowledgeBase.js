@@ -28,16 +28,16 @@ export const LOCAL_KNOWLEDGE_RULES = [
   {
     id: 'elder_health_sleep',
     category: 'elder',
-    pattern: /健康|养生|失眠|睡不好|腰|腿|关节|高血压|颈椎|按摩|体检/,
-    reaction: '长辈年纪大了，最关心的就是睡眠与身体舒适。健康舒缓类的礼物永远能送到心坎里。',
-    nextQuestion: '长辈平时主要的身体痛点或生活习惯是哪种？',
+    pattern: /健康|养生|保健|关怀|调理|日常|体检/,
+    reaction: '健康关怀永远是送长辈最贴心、最稳妥的心意方向。我们可以从日常调养与起居舒适度来挑选。',
+    nextQuestion: '在长辈的日常健康与起居方面，你更倾向哪种方向的贴心好物？',
     targetKey: 'personality',
     stage: 'preference',
     options: [
-      { value: '颈椎腰酸 / 容易疲劳', label: '颈椎腰酸 / 容易疲劳', emoji: '💆' },
-      { value: '睡眠浅 / 多梦失眠', label: '睡眠浅 / 容易失眠', emoji: '💤' },
-      { value: '关节怕冷 / 血液循环慢', label: '关节怕冷 / 畏寒', emoji: '🧣' },
-      { value: '注重食疗 / 爱喝养生茶', label: '注重食疗 / 养生茶', emoji: '🍵' },
+      { value: '日常食疗滋补 / 养生茶饮', label: '食疗滋补 / 养生茶饮', emoji: '🍵' },
+      { value: '起居舒适 / 贴心品质呵护', label: '起居舒适 / 贴心呵护', emoji: '🛏️' },
+      { value: '温和放松 / 缓解日常疲劳', label: '温和放松 / 舒缓疲劳', emoji: '🌿' },
+      { value: '日常监测 / 健康指标关注', label: '日常监测 / 便捷关注', emoji: '🩺' },
     ],
   },
   {
