@@ -62,7 +62,15 @@ export const useSessionStore = defineStore('session', {
     pushMessage(msg) {
       const m = { id: uid('msg'), at: Date.now(), ...msg }
       this.messages.push(m)
-      return m
+      return this.messages[this.messages.length - 1]
+    },
+
+    updateMessageText(id, newText, isStreaming = true) {
+      const target = this.messages.find((m) => m.id === id)
+      if (target) {
+        target.text = newText
+        target.streaming = isStreaming
+      }
     },
 
     setDynamicStep(step) {

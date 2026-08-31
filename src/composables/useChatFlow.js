@@ -64,18 +64,21 @@ export function useChatFlow() {
 
     // 1. 创建流式消息气泡
     const msg = session.pushMessage({ role: 'ai', text: '', stepId, streaming: true })
+    const msgId = msg.id
 
     // 2. 逐字流式打入
     const chars = Array.from(clean)
+    let currentText = ''
     for (let i = 0; i < chars.length; i++) {
       if (!isRunValid(runId)) break
-      msg.text += chars[i]
+      currentText += chars[i]
+      session.updateMessageText(msgId, currentText, true)
       const ch = chars[i]
       const isPause = /[,.!?:;，。！？：；\n]/.test(ch)
       await delay(isPause ? pauseDelay : charDelay)
     }
 
-    msg.streaming = false
+    session.updateMessageText(msgId, clean, false)
     await delay(isFast ? 30 : 80)
     return true
   }

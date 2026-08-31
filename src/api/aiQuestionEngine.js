@@ -17,8 +17,7 @@ export const INITIAL_STEP = {
   key: 'recipient',
   type: 'single',
   messages: [
-    '你好呀 👋 我是 GiftMind，你的 AI 私人挑礼策划师。',
-    '接下来我将根据你的实际情况为你量身挑选最懂 TA 的方案。\n\n先说说，这次想送给谁？',
+    '你好呀 👋 我是 GiftMind，你的 AI 私人挑礼策划师。先告诉我，这次想送给谁？',
   ],
   options: [
     { value: '女朋友 / 妻子', label: '女朋友 / 妻子', emoji: '💗' },
