@@ -2,12 +2,13 @@
  * ══════════════════════════════════════════════════════════════
  *  AI 核心服务 (Xiaomi MiMo & DeepSeek 双引擎支持)
  *  —— 真正的大模型智能送礼策划大脑：
- *     1. 真实 AI 选品引擎：根据具体痛点（如父母重复劳动）量身定制真实礼物，绝不推耳机错位品；
+ *     1. 直连 giftmind-data-studio 官方 164 款商品库，RAG 驱动 AI 从库中精准选品；
  *     2. 实时懂行接话与情绪共鸣（Live Reaction / 杜绝重复）；
  *     3. 4 大多风格情话/心意卡片定制与仪式感生成。
  * ══════════════════════════════════════════════════════════════
  */
 import { matchLocalKnowledge } from './localKnowledgeBase'
+import { retrieveCandidates, formatCandidatesForPrompt } from './catalogService'
 
 const MIMO_API_KEY = 'sk-cvqx5j4irwxdbv0lmlggjd9md013lndoplm6rkl0qm9vbh65'
 const MIMO_BASE_URL = 'https://api.xiaomimimo.com/v1'
@@ -72,8 +73,9 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
 请针对用户的具体回答【${ansStr}】，给出一句极其自然、懂行、有温度且让人感觉“被深刻理解”的即时点评/接话（1~2句话，35字以内）。
 要求：
 1. 绝对不要像机器人重复用户的词！要像身边的懂行朋友一样共情或点出背后的选品逻辑。
-2. 若用户提到长辈做家务/辛苦/劳累，重点肯定用户的孝顺与体贴，点明要选“省力减负、分担日常”的实用好物！
-3. 直接输出这一两句文案，不要带任何引号或解释。`
+2. 切忌自以为是添加狭隘预设，保持开放与关怀。
+3. 纯中文输出，严禁任何英文单词。
+4. 直接输出这一两句文案，不要带任何引号或解释。`
 
   const userPrompt = `受礼人：${recipient}
 场合：${occasion}
@@ -107,7 +109,7 @@ export async function getLiveReaction(step, answerValue, currentAnswers = {}) {
 }
 
 /**
- * 🌟 核心突破：由真实大模型生成契合具体痛点的完整送礼方案（绝不推错位礼物）
+ * 🌟 核心突破：让大模型 100% 从 giftmind-data-studio 官方商品数据库中精挑细选
  */
 export async function generateAiPlan(answers = {}) {
   const recipient = String(answers.recipient || 'TA')
@@ -117,59 +119,46 @@ export async function generateAiPlan(answers = {}) {
   const memory = String(answers.memory || answers.story || '')
   const feeling = String(answers.feeling || '被深深理解与关怀')
 
-  const systemPrompt = `你是精通人情世故与生活品味的资深礼物策划专家 GiftMind。
-你需要根据用户的问卷信息，为用户生成一份真正懂人心、选品极其贴切专业的完整送礼策划方案。
+  // 1. 从官方 164 款商品/体验库中多维检索候选池
+  const candidateGifts = retrieveCandidates(answers, 14)
+  const candidateText = formatCandidatesForPrompt(candidateGifts)
 
-【极其重要的选品人伦与逻辑原则】：
-1. 若送【父母/长辈】且用户提到【重复劳动/家务操劳/腰酸/健康/做饭】：
-   - 必须精准推荐：智能自清洁洗地机/扫拖机器人、腰椎颈椎热敷揉捏按摩仪、免看火多功能破壁机、人体工学电动清洁刷等【真实减负、关怀健康】的贴心好物！
-   - 严禁推荐耳机、游戏机、香水、彩妆等完全不搭边的错位物品！
-2. 若送【男朋友/女生/朋友】：根据具体性格和预算精准选品。
-3. 方案包含 3 件契合痛点的具体礼物清单（包含 name, emoji, price, why, tag）。
-4. 附上一封真挚、细腻、字字戳心的专属信件（paragraphs 3~4 段）。
+  const systemPrompt = `你是精通人情世故与生活品味的资深礼物策划专家 GiftMind。
+你需要根据用户的问卷信息，从【GiftMind 官方商品数据库候选集】中为用户挑选 3 件最贴切的真实礼物方案。
+
+【GiftMind 官方真实商品库候选清单（必须优先从中挑选）】：
+${candidateText}
+
+【选品与推荐规则】：
+1. 必须优先从上方官方商品库候选清单中挑选 3 件最契合的真实商品/体验（必须使用清单中的真实名称 name、价格 price、ID id）；
+2. 结合用户的具体回答与痛点，为每一件选出的商品撰写直击心坎的推荐理由 why（40字左右）；
+3. 附上一封真挚、细腻、字字戳心的专属信件（paragraphs 3~4 段）。
 
 必须输出严格 JSON 格式：
 {
-  "title": "方案主标题（12字以内，如：为爸妈的减负生活提案）",
-  "subtitle": "一句话温暖副标题（如：用科技与体贴，换下他们操劳的双手的温度心意）",
+  "title": "方案主标题（12字以内，如：为爸妈定制的舒缓生活提案）",
+  "subtitle": "一句话温暖副标题（如：用贴心关怀与陪伴，换下他们操劳的双手的温度心意）",
   "insight": {
     "summary": "专业洞察陈述（80字左右，深入点出为什么这么选）",
-    "traits": ["体贴孝顺", "减负省力", "健康关怀"],
-    "keyPoint": "选品核心逻辑（如：拒绝华而不实，直击家务劳累痛点）"
+    "traits": ["体贴孝顺", "健康关怀", "品质生活"],
+    "keyPoint": "选品核心逻辑（如：拒绝华而不实，直击长辈日常起居与放松痛点）"
   },
   "gifts": [
     {
-      "id": "g1",
-      "name": "智能自清洁无线洗地机",
-      "emoji": "🧹",
-      "price": "¥999-1499",
-      "why": "告别弯腰拖地的繁重家务，一键自清洁，真正把父母从每日重复清洁中解放出来。",
-      "tag": "首选减负推荐"
-    },
-    {
-      "id": "g2",
-      "name": "腰背颈椎多功能热敷揉捏按摩仪",
-      "emoji": "💆",
-      "price": "¥399",
-      "why": "针对操劳后的腰背酸痛，恒温热敷舒缓肌肉，随时随地给父母做专业按摩。",
-      "tag": "健康舒缓优选"
-    },
-    {
-      "id": "g3",
-      "name": "全自动免看火低音破壁料理机",
-      "emoji": "🍲",
-      "price": "¥299",
-      "why": "一键预约免看火，营养热饮轻松搞定，极大简化每日下厨步骤。",
-      "tag": "省心生活好物"
+      "id": "官方商品库中的真实ID",
+      "name": "官方商品库中的真实名称",
+      "emoji": "🎁",
+      "price": "官方商品库中的价格区间（如：¥300-600）",
+      "why": "针对用户的具体情况，阐述为什么选这件礼物的深度推荐理由（40字以内）",
+      "tag": "首选推荐"
     }
   ],
   "letter": {
     "salutation": "亲爱的爸妈：",
     "paragraphs": [
-      "见信好。",
-      "每次回家，总看到你们忙前忙后。那些日复一日的繁琐家务，虽然你们从不抱怨，但我其实一直看在眼里，也心疼在心里。",
-      "这次特意为你们挑选了能分担日常辛劳的实用小帮手，希望能替我多陪伴你们、分担一点辛劳。",
-      "愿你们健健康康，每天都有更多时间喝茶、散步、享清闲。"
+      "第一段内容...",
+      "第二段内容...",
+      "第三段内容..."
     ],
     "signature": "—— 爱你们的孩子"
   }
@@ -178,7 +167,7 @@ export async function generateAiPlan(answers = {}) {
   const userPrompt = `【受礼人】：${recipient}
 【场合】：${occasion}
 【预算区间】：${budget}
-【性格/爱好标签】：${personality}
+【性格/偏好标签】：${personality}
 【特别细节/心愿故事】：${memory}
 【期望感受】：${feeling}`
 
@@ -193,7 +182,7 @@ export async function generateAiPlan(answers = {}) {
 
     const data = JSON.parse(raw)
     if (data && data.gifts?.length) {
-      return sanitizePlanData(data, answers)
+      return sanitizePlanData(data, answers, candidateGifts)
     }
   } catch (err) {
     console.warn('[AI Plan Generation fallback]:', err)
@@ -202,21 +191,29 @@ export async function generateAiPlan(answers = {}) {
   return null
 }
 
-function sanitizePlanData(data, answers) {
-  const gifts = (data.gifts || []).map((g, i) => ({
-    id: g.id || `g_${Date.now()}_${i}`,
-    catalogId: g.id || `g_${Date.now()}_${i}`,
-    name: String(g.name || '心意精选礼物'),
-    emoji: String(g.emoji || '🎁'),
-    price: String(g.price || answers.budget || '¥300-600'),
-    why: String(g.why || '为你挑选的特别礼物'),
-    tag: String(g.tag || (i === 0 ? '首选推荐' : '心意备选')),
-    kind: 'physical',
-  }))
+function sanitizePlanData(data, answers, candidateGifts = []) {
+  const gifts = (data.gifts || []).map((g, i) => {
+    // 尽量关联原数据库中的完整数据
+    const match = candidateGifts.find((cg) => cg.id === g.id || cg.canonical_name === g.name)
+    const cleanName = String(g.name || match?.canonical_name || '心意精选好物').replace(/[《》]/g, '')
+    const price = String(g.price || (match?.price_min ? `¥${match.price_min}-${match.price_max}` : answers.budget || '¥300-600'))
+
+    return {
+      id: g.id || match?.id || `g_${Date.now()}_${i}`,
+      catalogId: g.id || match?.id || `g_${Date.now()}_${i}`,
+      name: cleanName,
+      emoji: String(g.emoji || match?.emoji || '🎁'),
+      price,
+      why: String(g.why || match?.short_description || '为你精选的特别心意'),
+      tag: String(g.tag || (i === 0 ? '首选推荐' : i === 1 ? '舒缓优选' : '心意好物')),
+      kind: match?.gift_type_code || 'product',
+      description: match?.short_description || '',
+    }
+  })
 
   const defaultLetter = {
     salutation: `${answers.recipient || '你'}：`,
-    paragraphs: ['有些话当面说不出口，就写在信里了。', '愿这份心意能带给你一份小确幸。'],
+    paragraphs: ['有些话当面说不出口，就写在信里了。', '愿这份心意能带给你一份温暖与小确幸。'],
     signature: '—— 爱你的我',
   }
 
@@ -231,9 +228,9 @@ function sanitizePlanData(data, answers) {
     gifts,
     recommendationGroups: [
       {
-        category: '减负省心首选',
-        title: '分担日常劳作',
-        subtitle: '真正能派上用场的实用好物',
+        category: '官方精选方案',
+        title: '贴心心意推荐',
+        subtitle: '从官方标准商品库中为你精挑细选',
         items: gifts,
       },
     ],
