@@ -1,0 +1,152 @@
+/* ============================================================
+   GiftMind Design Tokens · 「明亮温柔」
+   奶油白底 + 莫兰迪色系 · 圆润卡片 · 低对比暖阴影
+   —— 改主题只改这一个文件；组件层不允许写死颜色
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* ── 中性 / 纸感 ───────────────────────────── */
+  --c-paper: #fbf7f2; /* 页面底色 · 奶油白 */
+  --c-paper-2: #f5efe7; /* 次级底 · 分组背景 */
+  --c-paper-3: #efe8de; /* 更深的分隔底 */
+  --c-surface: #ffffff; /* 卡片 */
+  --c-surface-alt: #fffdfa; /* 卡片（微暖） */
+
+  --c-ink: #3b342e; /* 主文字 */
+  --c-ink-2: #6e6259; /* 次文字 */
+  --c-ink-3: #9a8f86; /* 辅助/说明 */
+  --c-ink-4: #c3b9af; /* 占位/禁用 */
+  --c-ink-inverse: #fffaf4;
+
+  --c-line: rgba(59, 52, 46, 0.08);
+  --c-line-strong: rgba(59, 52, 46, 0.16);
+  --c-mask: rgba(59, 52, 46, 0.42);
+
+  /* ── 莫兰迪主色板 ──────────────────────────── */
+  /* 玫瑰陶土 · 品牌主色 */
+  --c-rose: #c4897c;
+  --c-rose-deep: #ad7064;
+  --c-rose-soft: #f4e5e0;
+  --c-rose-tint: #fbf1ee;
+
+  /* 鼠尾草绿 · 成功 / 体验类 */
+  --c-sage: #8fa78b;
+  --c-sage-deep: #748d70;
+  --c-sage-soft: #e7efe4;
+
+  /* 灰紫 · 情绪 / 定制类 */
+  --c-lilac: #a79eb6;
+  --c-lilac-deep: #8b809d;
+  --c-lilac-soft: #eeeaf2;
+
+  /* 沙杏 · 强调 / 价格 */
+  --c-sand: #cfa878;
+  --c-sand-deep: #b58d5d;
+  --c-sand-soft: #f7eedf;
+
+  /* 雾蓝 · 信息 / 数字内容 */
+  --c-sky: #93a7b8;
+  --c-sky-deep: #78909f;
+  --c-sky-soft: #e8eef3;
+
+  /* 语义别名 */
+  --c-primary: var(--c-rose);
+  --c-primary-deep: var(--c-rose-deep);
+  --c-primary-soft: var(--c-rose-soft);
+  --c-success: var(--c-sage);
+  --c-warning: var(--c-sand-deep);
+  --c-danger: #c07b72;
+
+  /* ── 渐变 ─────────────────────────────────── */
+  --g-warm: linear-gradient(135deg, #f7e9e3 0%, #f3ece1 52%, #eaeee8 100%);
+  --g-primary: linear-gradient(135deg, #c98f81 0%, #b7796d 100%);
+  --g-dawn: linear-gradient(160deg, #fdf6ef 0%, #f7ece6 40%, #eef0ec 100%);
+  --g-dusk: linear-gradient(165deg, #f2e7ef 0%, #f6ece5 55%, #f9f3ea 100%);
+  --g-mask-bottom: linear-gradient(to top, var(--c-paper) 62%, rgba(251, 247, 242, 0));
+
+  /* ── 圆角 ─────────────────────────────────── */
+  --r-xs: 6px;
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 24px;
+  --r-xl: 32px;
+  --r-pill: 999px;
+
+  /* ── 阴影（暖调、低对比） ───────────────────── */
+  --sh-1: 0 1px 2px rgba(120, 92, 74, 0.04), 0 4px 12px rgba(120, 92, 74, 0.05);
+  --sh-2: 0 2px 6px rgba(120, 92, 74, 0.06), 0 12px 28px rgba(120, 92, 74, 0.08);
+  --sh-3: 0 6px 16px rgba(120, 92, 74, 0.08), 0 24px 48px rgba(120, 92, 74, 0.1);
+  --sh-primary: 0 8px 22px rgba(173, 112, 100, 0.28);
+  --sh-inset: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  /* ── 字体 ─────────────────────────────────── */
+  --f-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  --f-serif: 'Noto Serif SC', 'Songti SC', 'Source Han Serif SC', serif;
+  --f-display: 'DM Serif Display', 'Noto Serif SC', 'Songti SC', serif;
+
+  --fs-display: 34px;
+  --fs-h1: 26px;
+  --fs-h2: 20px;
+  --fs-h3: 17px;
+  --fs-body: 15px;
+  --fs-sm: 13.5px;
+  --fs-caption: 12px;
+  --fs-micro: 11px;
+
+  --lh-tight: 1.2;
+  --lh-snug: 1.45;
+  --lh-normal: 1.65;
+  --lh-loose: 1.95;
+
+  --ls-wide: 0.12em;
+  --ls-wider: 0.2em;
+
+  /* ── 间距（8pt 栅格 + 半格） ────────────────── */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 56px;
+  --s-10: 72px;
+
+  --page-x: 20px; /* 页面左右安全边距 */
+
+  /* ── 动效 ─────────────────────────────────── */
+  --e-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --e-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --e-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 0.16s;
+  --t-base: 0.26s;
+  --t-slow: 0.44s;
+
+  /* ── 层级 ─────────────────────────────────── */
+  --z-nav: 100;
+  --z-bar: 200;
+  --z-sheet: 300;
+  --z-toast: 400;
+
+  /* ── 安全区 ───────────────────────────────── */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  /* ── 布局常量 ─────────────────────────────── */
+  --navbar-h: 48px;
+  --tabbar-h: 56px;
+  --app-max-w: 480px;
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0.01ms;
+    --t-base: 0.01ms;
+    --t-slow: 0.01ms;
+  }
+}
