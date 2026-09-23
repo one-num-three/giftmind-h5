@@ -70,6 +70,8 @@ export function normalizeServiceStatus(raw) {
     state,
     deepseekConfigured: Boolean(data.deepseekConfigured),
     searchConfigured: Boolean(data.searchConfigured),
+    searchProvider: typeof data.searchProvider === 'string' ? data.searchProvider : '',
+    searchReadiness: data.searchReadiness || 'not_checked',
     mode: data.mode || '',
     voiceConfigured: Boolean(data.voiceConfigured),
     model: typeof data.model === 'string' ? data.model : '',

@@ -16,6 +16,13 @@ describe('H5 API contracts', () => {
     expect(normalizeServiceStatus({ ok: false }).state).toBe(SERVICE_STATE.unavailable)
   })
 
+  it('keeps marketplace capability separate from real login readiness', () => {
+    const status = normalizeServiceStatus({ ok: true, mode: 'web_search', deepseekConfigured: true, searchConfigured: true, searchProvider: 'taobao_jd_browser', searchReadiness: 'not_checked' })
+    expect(status.state).toBe(SERVICE_STATE.connected)
+    expect(status.searchProvider).toBe('taobao_jd_browser')
+    expect(status.searchReadiness).toBe('not_checked')
+  })
+
   it('rejects incomplete plan payloads', () => {
     expect(() => assertPlan({ gifts: [] })).toThrow('信件')
     expect(assertPlan({ gifts: [], letter: {}, ritual: [] })).toEqual({ gifts: [], letter: {}, ritual: [] })

@@ -50,7 +50,8 @@ function text(v) {
 
 const g = computed(() => (props.gift && typeof props.gift === 'object' ? props.gift : {}))
 
-const sources = computed(() => toArray(g.value.sources).filter((item) => /^https?:\/\//i.test(item?.url || '')))
+const purchaseLinks = computed(() => toArray(g.value.purchaseLinks).filter((item) => /^https:\/\/(?:item\.jd\.com\/\d+\.html|(?:item\.taobao\.com|detail\.tmall\.com)\/item\.htm\?id=\d+)$/.test(item?.url || '')))
+const sources = computed(() => toArray(g.value.sources).filter((item) => /^https?:\/\//i.test(item?.url || '') && !purchaseLinks.value.some((link) => link.url === item.url)))
 const emoji = computed(() => text(g.value.emoji) || '🎁')
 const name = computed(() => recipientAwareCopy(g.value.name, props.recipient) || '一件还没起名的礼物')
 const selectionKey = computed(() => (
@@ -214,6 +215,14 @@ function onSelect() {
 
       <div class="gift__summary">
         <p class="gift__why">{{ explanation.fitReason }}</p>
+        <div v-if="purchaseLinks.length" class="gift__sources" aria-label="本次检索到的商品详情">
+          <p>本次检索到的商品 · 规格、结算价与库存仍需确认</p>
+          <a v-for="link in purchaseLinks" :key="link.url" :href="link.url" target="_blank" rel="noopener noreferrer">
+            {{ link.platform === 'jd' ? '京东详情' : '淘宝/天猫详情' }} · {{ link.title }}
+            <span v-if="link.priceText"> · 页面展示 {{ link.priceText }}</span>
+            <span v-if="link.shop"> · {{ link.shop }}</span>
+          </a>
+        </div>
         <div v-if="sources.length" class="gift__sources">
           <p>本次检索来源 · 价格与库存以下单页面为准</p>
           <a v-for="source in sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title || '查看网页来源' }}</a>
@@ -231,7 +240,7 @@ function onSelect() {
           </span>
         </div>
 
-        <!-- 🌟 电商实时搜索与比价直达 -->
+        <!-- 手动搜索入口，不作为后台已检索的商品证据。 -->
         <div class="gift__ecommerce">
           <a
             :href="g.ecommerceLinks?.taobaoUrl || `https://s.taobao.com/search?q=${encodeURIComponent(name)}`"

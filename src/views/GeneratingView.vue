@@ -95,12 +95,13 @@ const countText = computed(() => {
 const serviceHint = computed(() => {
   const status = planStore.serviceStatus
   if (!status) return '正在连接 AI 策划大脑'
-    if (status.mode === 'web_search') {
-      if (!status.deepseekConfigured) return '服务端尚未配置 DeepSeek'
-      if (!status.searchConfigured) return '服务端尚未配置联网搜索'
-      return `${status.model || 'DeepSeek'} · 自主联网检索，不使用商品库`
-    }
-    if (status.state === 'unavailable') return '本地服务不可达'
+  if (status.mode === 'web_search') {
+    if (!status.deepseekConfigured) return '服务端尚未配置 DeepSeek'
+    if (!status.searchConfigured) return '服务端搜索能力未启用或浏览器不可用'
+    if (status.searchProvider === 'taobao_jd_browser') return `${status.model || 'DeepSeek'} · 将检索淘宝/京东；平台可能要求登录或验证`
+    return `${status.model || 'DeepSeek'} · 自主联网检索，不使用商品库`
+  }
+  if (status.state === 'unavailable') return '本地服务不可达'
   if (status.state === 'empty_catalog') return '全网检索准备中'
   if (status.state === 'rule_fallback') return 'DeepSeek 未配置，将使用规则模式'
   const countLabel = typeof status.activeGiftCount === 'number'
