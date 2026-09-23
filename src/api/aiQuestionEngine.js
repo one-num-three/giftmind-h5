@@ -6,7 +6,6 @@
  */
 import { classifyRelationship } from '../utils/relationship.js'
 import { routeNextDecision, buildDialogStateCanvas, DOMAIN_KNOWLEDGE, evaluateJevSystemOne } from '../services/jevEngine.js'
-import { formatTraitsBlackboardForPrompt } from '../services/jevTraitsManager.js'
 
 export { classifyRelationship, routeNextDecision, buildDialogStateCanvas, evaluateJevSystemOne }
 
@@ -158,45 +157,21 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
     .map((m) => `${m.role === 'user' ? '【用户】' : m.role === 'system' ? '【会话操作】' : '【AI买手】'}: ${m.text}`)
     .join('\n')
 
-  const traitsBlackboard = formatTraitsBlackboardForPrompt(currentTraits)
-
   const sysPrompt = `你是 GiftMind，一位善于倾听、懂得选礼的私人顾问。通过自然对话理解用户真正想解决的问题，帮助其作出合适的选择。
 以用户原话和最新纠正为依据，尊重明确要求，区分已知、未知与推测。追问方向、深度、表达及何时收尾由你综合对话与用户意愿判断，不按固定流程、轮数或某个字段决定。
 
 可选参考：
 1. 预算只是价格边界约束，绝非选礼决策实质，不因用户提及预算而草率结束；继续讨论能否改善选择，顺着爱好生活深挖装备现状、使用场景或痛点风格。
 2. 提问切入关键决策分歧，只问送礼人日常肉眼可见的事实，不问生僻黑话；选项提供贴近日常认知的选项及稳妥兜底项。
-3. 【双轨解耦与防抽风准则】：
-   - 下方的已知心意特征仅供你在脑海中作为“已掌握背景事实”参考；
-   - 严禁向用户报出任何卡槽代码或术语（如禁止说“我们来确定一下您的第4个特质”），严禁像调查问卷一样逐条打勾审讯；
-   - 你的唯一任务是顺着用户上一句话的兴奋点或痛点，以顶级买手的敏锐嗅觉自然抛出下一个好问题。
-4. 【特质提取协议】：
-   - 除了生成问句外，请在返回的 JSON 中附带 "extracted_traits" 对象，把你从用户最新发言中明确捕捉到的新特质提炼出来（如 {"item_status": "手头无器具", "usage_scene": "工位"}）；若无新特质或用户只是客套/跳过，则留空对象 {}。
-   - 若对话中发现了特定细分方向（如茶饮、电竞、文创美学等），可在 "suggested_domain" 中标注（如 "tea"），或在 "suggested_slots" 中推荐 2~4 个针对该领域的独特决策维度。
+3. 这是供你权衡的思路，不是逐项完成的清单。
 
-为了界面渲染，请返回 JSON 对象。
-结构如下：
-{
-  "isReady": boolean,
-  "messages": string[],
-  "key": string,
-  "options": [
-    {"label": "显示文字", "value": "用户选中提交的文本", "desc": "解释", "emoji": "图标"}
-  ],
-  "type": "single" | "multi" | "text",
-  "extracted_traits": {
-    "key": "value"
-  },
-  "suggested_domain": string
-}`
+为了界面渲染，请返回 JSON 对象。isReady 表示是否进入确认；继续交流时 messages 为你要说的话组成的字符串数组，key 为本轮记录标识。options 为可选回答数组，可为空；每项包含 label（显示文字）、value（用户选中后提交的回答文本），可附 desc 和 emoji。type 可为 single、multi 或 text。内容、数量和组织方式由你决定。`
 
   const userContent = `【完整对话记录】
 ${recentDialogHistory || '（刚开始对话）'}
 
 【当前回答原文】
 ${JSON.stringify(answers, null, 2)}
-
-${traitsBlackboard}
 
 回答保留动态字段、未知和跳过；确认页修改后的值以当前回答为准。请继续这段对话。`
 

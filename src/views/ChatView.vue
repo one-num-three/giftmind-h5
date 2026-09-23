@@ -15,7 +15,6 @@ import ChatBubble from '@/components/chat/ChatBubble.vue'
 import TypingDots from '@/components/chat/TypingDots.vue'
 import ChoicePanel from '@/components/chat/ChoicePanel.vue'
 import ChatComposer from '@/components/chat/ChatComposer.vue'
-import TraitSlotsCanvas from '@/components/chat/TraitSlotsCanvas.vue'
 
 const router = useRouter()
 const session = useSessionStore()
@@ -228,9 +227,6 @@ onUnmounted(() => {
         <div v-else class="chat__stage">{{ session.stageText }}</div>
       </div>
     </header>
-
-    <!-- 🌟 Jev 驱动的 12 维动态心意特质罗盘与卡槽画布 -->
-    <TraitSlotsCanvas />
 
     <!-- 🌟 心理学与买手人情动态洞察画像徽标栏 -->
     <div v-if="session.insightBadges && session.insightBadges.length" class="chat__badges scroll-x">

@@ -176,17 +176,20 @@ export const useSessionStore = defineStore('session', {
       this.status = 'asking'
     },
 
-    /** 🌟 Jev 驱动的 12 维动态心意特质同步与审核入槽 */
+    /** 🌟 Jev 驱动的 12 维动态心意特质后台静默同步与审核入槽 */
     syncDynamicTraits(extractedCandidate = {}, domain = '', suggestedSlots = []) {
       if (!this.dynamic12Traits || this.dynamic12Traits.length !== 12) {
         this.dynamic12Traits = createInitial12Traits()
       }
+      const canvas = buildDialogStateCanvas(this.answers || {})
+      const activeDomain = domain || canvas.domain || ''
       // 1. 若识别到品类或模型建议槽位，动态调整 8 维自适应槽位
-      if (domain || (Array.isArray(suggestedSlots) && suggestedSlots.length >= 2)) {
-        this.dynamic12Traits = morphDynamicTraitsByDomain(this.dynamic12Traits, domain, suggestedSlots)
+      if (activeDomain || (Array.isArray(suggestedSlots) && suggestedSlots.length >= 2)) {
+        this.dynamic12Traits = morphDynamicTraitsByDomain(this.dynamic12Traits, activeDomain, suggestedSlots)
       }
       // 2. Jev 严格裁决：符合的填入，不符合/模糊的不填
-      this.dynamic12Traits = evaluateAndFill12Traits(this.dynamic12Traits, extractedCandidate, this.answers)
+      const mergedCandidate = { ...canvas, ...extractedCandidate }
+      this.dynamic12Traits = evaluateAndFill12Traits(this.dynamic12Traits, mergedCandidate, this.answers)
       this.persistDraft()
       return this.dynamic12Traits
     },

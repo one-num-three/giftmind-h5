@@ -152,19 +152,16 @@ export function useChatFlow() {
       const aiResult = await fetchNextDynamicQuestion(
         session.answers,
         session.messages,
-        session.stepIndex,
-        session.traits12
+        session.stepIndex
       )
       if (!isRunValid(runId)) return
 
-      // 🌟 Jev 动态 12 特质管理：交由 Jev 审核并同步入槽
-      if (aiResult?.extracted_traits || aiResult?.suggested_domain || aiResult?.suggested_slots) {
-        session.syncDynamicTraits(
-          aiResult.extracted_traits || {},
-          aiResult.suggested_domain || '',
-          aiResult.suggested_slots || []
-        )
-      }
+      // 🌟 后台静默维护 12 维心意特质画像（前端界面不展示，后台与方案生成自适应留存）
+      session.syncDynamicTraits(
+        aiResult?.extracted_traits || {},
+        aiResult?.suggested_domain || '',
+        aiResult?.suggested_slots || []
+      )
 
       if (aiResult?.isReady) {
         session.forceFinish()
