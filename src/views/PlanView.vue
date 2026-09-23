@@ -55,6 +55,29 @@ const hasInsight = computed(() => {
   const traits = Array.isArray(i.traits) ? i.traits.filter((t) => text(t)) : []
   return Boolean(text(i.summary) || text(i.keyPoint) || traits.length)
 })
+
+/* ── 🌟 当面递送 30 秒说辞与避坑指南 ── */
+const deliveryScript = computed(() => {
+  return text(plan.value?.deliveryScript || plan.value?.delivery_script) || ''
+})
+const socialEtiquetteTip = computed(() => {
+  return text(plan.value?.socialEtiquetteTip || plan.value?.social_etiquette_tip) || ''
+})
+const scriptCopied = ref(false)
+async function onCopyDeliveryScript() {
+  if (!deliveryScript.value) return
+  const ok = await copyText(deliveryScript.value)
+  if (ok) {
+    scriptCopied.value = true
+    ui.success('递送说辞已复制')
+    setTimeout(() => {
+      scriptCopied.value = false
+    }, 2000)
+  } else {
+    ui.error('复制失败，请长按选中文字')
+  }
+}
+
 const gifts = computed(() => (Array.isArray(plan.value?.gifts) ? plan.value.gifts : []))
 const comparisonGifts = computed(() => {
   const source = gifts.value.map((gift) => ({ ...gift, awards: [] }))
@@ -608,6 +631,31 @@ onUnmounted(() => {
           </div>
         </section>
 
+        <!-- 🌟 当面递送 30 秒说辞与避坑指南 -->
+        <section v-if="deliveryScript" class="sec anim-up d-3 delivery-script-sec">
+          <div class="sec__head">
+            <p class="section-label">当面送出手 · 30 秒递送说辞</p>
+            <button class="linkbtn tap" type="button" @click="onCopyDeliveryScript">
+              <GIcon name="copy" :size="14" />
+              <span>{{ scriptCopied ? '已复制' : '复制说辞' }}</span>
+            </button>
+          </div>
+          <div class="delivery-script-card">
+            <div class="delivery-script-quote">
+              <span class="delivery-script-mark">“</span>
+              <p class="delivery-script-text">{{ deliveryScript }}</p>
+              <span class="delivery-script-mark delivery-script-mark--end">”</span>
+            </div>
+            <div v-if="socialEtiquetteTip" class="delivery-etiquette">
+              <div class="delivery-etiquette__badge">
+                <span class="delivery-etiquette__icon">💡</span>
+                <span class="delivery-etiquette__label">人情分寸与避坑</span>
+              </div>
+              <p class="delivery-etiquette__desc">{{ socialEtiquetteTip }}</p>
+            </div>
+          </div>
+        </section>
+
         <!-- 信 -->
         <section v-if="letter || letterLoading" ref="deliveryRef" class="sec anim-up d-3">
           <div v-if="deliveryStatus" class="delivery-status" role="status" aria-live="polite">
@@ -862,6 +910,60 @@ onUnmounted(() => {
   flex: 1;
   min-width: 0;
   margin-bottom: 0;
+}
+
+/* ══ 当面递送 30 秒说辞卡片 ══════════════════ */
+.delivery-script-card {
+  padding: var(--s-5) var(--s-4);
+  border-radius: var(--r-lg, 16px);
+  background: color-mix(in srgb, var(--c-sand-soft, #fdf6ed) 50%, var(--c-surface, #ffffff));
+  border: 1px solid color-mix(in srgb, var(--c-rose, #e07a5f) 22%, var(--c-line, #eee));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.02);
+}
+.delivery-script-quote {
+  position: relative;
+  padding: 0 var(--s-2);
+}
+.delivery-script-mark {
+  font-family: var(--f-serif, Georgia, serif);
+  font-size: 26px;
+  line-height: 1;
+  color: var(--c-rose-deep, #c05621);
+  opacity: 0.7;
+}
+.delivery-script-mark--end {
+  float: right;
+  margin-top: -6px;
+}
+.delivery-script-text {
+  margin: var(--s-2) 0;
+  font-size: var(--fs-body, 15px);
+  line-height: var(--lh-relaxed, 1.7);
+  color: var(--c-ink, #2d3748);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.delivery-etiquette {
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.delivery-etiquette__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--c-rose-deep, #c05621);
+}
+.delivery-etiquette__desc {
+  margin: 0;
+  font-size: var(--fs-caption, 13px);
+  color: var(--c-ink-3, #718096);
+  line-height: var(--lh-normal, 1.5);
 }
 
 .linkbtn {

@@ -94,11 +94,19 @@ const countText = computed(() => {
 
 const serviceHint = computed(() => {
   const status = planStore.serviceStatus
-  if (!status) return '正在连接本地策划服务'
-  if (status.state === 'unavailable') return '本地服务不可达'
-  if (status.state === 'empty_catalog') return '礼物库暂无可用数据'
+  if (!status) return '正在连接 AI 策划大脑'
+    if (status.mode === 'web_search') {
+      if (!status.deepseekConfigured) return '服务端尚未配置 DeepSeek'
+      if (!status.searchConfigured) return '服务端尚未配置联网搜索'
+      return `${status.model || 'DeepSeek'} · 自主联网检索，不使用商品库`
+    }
+    if (status.state === 'unavailable') return '本地服务不可达'
+  if (status.state === 'empty_catalog') return '全网检索准备中'
   if (status.state === 'rule_fallback') return 'DeepSeek 未配置，将使用规则模式'
-  return `${status.model || 'DeepSeek'} 已连接 · ${status.activeGiftCount} 件候选礼物`
+  const countLabel = typeof status.activeGiftCount === 'number'
+    ? `${status.activeGiftCount} 件候选礼物`
+    : (status.activeGiftCount || '全网实时开放检索')
+  return `${status.model || 'DeepSeek AI 选品大脑'} 已连接 · ${countLabel}`
 })
 
 const issue = computed(() => planStore.generationIssue)

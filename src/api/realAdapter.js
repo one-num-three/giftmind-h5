@@ -10,8 +10,7 @@ import {
   normalizeServiceStatus,
 } from './contracts'
 
-// 完整方案生成比单字段建议更耗时；前端窗口要覆盖后端 120 秒的
-// 单次耐心请求，否则后端仍在生成时浏览器会先报超时。
+// 联网生成与替换共用请求窗口，覆盖后端 170 秒的总时限。
 const PLAN_GENERATION_TIMEOUT = 180000
 
 function startProgress(onProgress) {
@@ -127,7 +126,7 @@ export async function replaceGift(plan, { targetId, reason, reasonNote = '', loc
       lockedCatalogIds: lockedIds,
       currentPlan: plan || null,
     },
-    { timeout: 60000 },
+    { timeout: PLAN_GENERATION_TIMEOUT },
   )
 }
 
@@ -185,14 +184,26 @@ export async function createShare(plan, config = {}) {
     { plan: cloneSharePlan(plan), config },
     { timeout: 30000 },
   )
+  if (record?.shareId && record?.manageToken && typeof localStorage !== 'undefined') {
+    try {
+      localStorage.setItem(`giftmind_share_token_${record.shareId}`, record.manageToken)
+    } catch {}
+  }
   return { ...record, url: shareUrl(record.shareId) }
 }
 
 export async function updateShare(shareId, plan, config = {}) {
+  let manageToken = config.manageToken
+  if (!manageToken && typeof localStorage !== 'undefined') {
+    try {
+      manageToken = localStorage.getItem(`giftmind_share_token_${shareId}`)
+    } catch {}
+  }
+  const headers = manageToken ? { 'X-Share-Manage-Token': manageToken } : {}
   const record = await http.put(
     `${H5_ENDPOINTS.updateShare}${shareId}`,
-    { plan: cloneSharePlan(plan), config },
-    { timeout: 30000 },
+    { plan: cloneSharePlan(plan), config, manageToken },
+    { timeout: 30000, headers },
   )
   return { ...record, url: shareUrl(record.shareId) }
 }

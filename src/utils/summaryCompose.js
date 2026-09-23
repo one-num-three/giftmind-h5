@@ -36,6 +36,27 @@ function cleanSummaryNotes(value) {
     .join('；')
 }
 
+// 确认页按实际问题呈现，不再补写用户没有说过的故事和情绪。
+export function composeConsultationBlocks(answers = {}, answerSteps = {}, messages = []) {
+  const labels = {
+    recipient: '送给谁', budget: '预算', occasion: '送礼契机', timing: '送出时间',
+    taboo: '需要避开', constraints: '补充要求', memory: '你提到的细节',
+    preference_direction: '偏好方向', domain: '兴趣方向', feeling: '想表达的心意',
+  }
+  return Object.entries(answers).filter(([key]) => key !== 'retry_action').map(([key, value], index) => {
+    const step = answerSteps[key]
+    const question = step?.messages?.at(-1)
+    const oldQuestion = messages.filter((m) => m.role === 'ai' && m.stepId === key).at(-1)?.text
+    const text = Array.isArray(value) ? value.join('、')
+      : typeof value === 'boolean' ? (value ? '是' : '否')
+        : value && typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')
+    return {
+      key, label: question || oldQuestion || labels[key] || `对话细节 ${index + 1}`,
+      text, skipped: !text.trim(),
+    }
+  })
+}
+
 export function composeSummaryBlocks(answers = {}) {
   const recipient = recipientText(answers.recipient)
   const occasion = text(answers.occasion, '一个特别的日子')

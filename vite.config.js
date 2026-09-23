@@ -20,10 +20,29 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5173,
       proxy: {
+        '/deepseek-proxy': {
+          target: 'https://api.deepseek.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/deepseek-proxy/, ''),
+          headers: {
+            ...(process.env.DEEPSEEK_API_KEY ? { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` } : {}),
+          },
+        },
         '/mimo-proxy': {
-          target: 'https://api.xiaomimimo.com',
+          target: 'https://api.deepseek.com',
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/mimo-proxy/, ''),
+          headers: {
+            ...(process.env.DEEPSEEK_API_KEY ? { Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}` } : {}),
+          },
+        },
+        '/jev-proxy': {
+          target: 'https://api.typesafe.ai',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/jev-proxy/, ''),
+          headers: {
+            ...(process.env.JEV_API_KEY ? { Authorization: `Bearer ${process.env.JEV_API_KEY}` } : {}),
+          },
         },
         // 真实后端联调时打开：把 /api 代理到网关，避免跨域
         '/api': {

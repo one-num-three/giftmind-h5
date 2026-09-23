@@ -9,8 +9,7 @@ export function classifyRelationship(recipient = '') {
   const r = String(recipient || '').trim()
 
   // 1. 伴侣 / 恋人（最高优先级判定，彻底避免“女朋友/妻子”误伤）
-  if (/(女朋友|妻子|老婆|女友|男朋友|丈夫|老公|男友|对象|爱人|伴侣|情侣|暗恋|太太|先生|另一半|闺蜜|好闺蜜)/.test(r)) {
-    if (/闺蜜/.test(r)) return 'friend'
+  if (/(女朋友|妻子|老婆|女友|男朋友|丈夫|老公|男友|对象|爱人|伴侣|情侣|暗恋|太太|先生|另一半)/.test(r)) {
     return 'lover'
   }
 

@@ -42,7 +42,7 @@ export const CHAT_FLOW = [
       { value: '女朋友 / 妻子', label: '女朋友 / 妻子', emoji: '💗' },
       { value: '男朋友 / 丈夫', label: '男朋友 / 丈夫', emoji: '💙' },
       { value: '父母', label: '父母', emoji: '🏡' },
-      { value: '闺蜜 / 好友', label: '闺蜜 / 好友', emoji: '🤝' },
+      { value: '朋友 / 好友', label: '朋友 / 好友', emoji: '🤝' },
       { value: '同事 / 上司', label: '同事 / 上司', emoji: '🧑‍💼' },
       { value: '孩子 / 晚辈', label: '孩子 / 晚辈', emoji: '🎈' },
     ],

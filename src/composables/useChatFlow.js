@@ -6,17 +6,16 @@
  *    1. 作答后 0 延迟秒级响应，告别漫长空白停顿；
  *    2. 拟真真人打字节奏（35ms/字，遇标点呼吸 140ms），字字可见，拒绝暴风骤雨式倾倒；
  *    3. 气泡之间自然衔接（300ms 微顿），像真实朋友在微信对话；
- *    4. 深度 5 步递进式出题，支持右上角随时看方案。
+ *    4. 接续模型自主对话，支持用户随时确认或继续聊。
  * ══════════════════════════════════════════════════════════════
  */
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
 import { fetchNextDynamicQuestion, INITIAL_STEP } from '@/api/aiQuestionEngine'
-import { getLiveReaction } from '@/api/mimoService'
 
 const DONE_TAG = '__done__'
-const FINISH_TEXT = '我已经完全理解了 TA 的喜好细节与你的心意，正在为您定制最具质感的送礼方案 ✨'
+const FINISH_TEXT = '先一起核对刚才聊到的细节；确认后，我会根据这些线索上网找合适的礼物。'
 
 export function useChatFlow() {
   const session = useSessionStore()
@@ -57,8 +56,9 @@ export function useChatFlow() {
     if (!clean) return true
 
     const isFast = speedMode.value === 'fast'
-    const charDelay = isFast ? 18 : 36       // 真人自然打字速度（约 15~20 字/秒）
-    const pauseDelay = isFast ? 60 : 150     // 遇标点符号自然停顿呼吸
+    const charDelay = isFast ? 12 : 22       // 真人自然打字速度（约 25~35 字/秒）
+    const pauseDelay = isFast ? 40 : 90      // 遇标点符号自然微顿
+    const postDelay = isFast ? 80 : 160
 
     // 1. 创建流式消息气泡
     const msg = session.pushMessage({ role: 'ai', text: '', stepId, streaming: true })
@@ -77,7 +77,7 @@ export function useChatFlow() {
     }
 
     session.updateMessageText(msgId, clean, false)
-    await delay(isFast ? 120 : 250)
+    await delay(postDelay)
     return true
   }
 
@@ -98,13 +98,27 @@ export function useChatFlow() {
   }
 
   function displayOf(step, value) {
-    if (typeof step?.summary !== 'function') return undefined
-    try {
-      const t = step.summary(value)
-      return typeof t === 'string' && t ? t : undefined
-    } catch {
-      return undefined
+    if (typeof step?.summary === 'function') {
+      try {
+        const t = step.summary(value)
+        if (typeof t === 'string' && t) return t
+      } catch {
+        // ignore
+      }
     }
+    // 🌟 核心约束：以用户界面上实际看到的纯净选项文字（label）为准，杜绝将内部冗长描述或脑补句子打入用户气泡
+    if (step?.options && Array.isArray(step.options)) {
+      if (Array.isArray(value)) {
+        const labels = value.map((v) => {
+          const found = step.options.find((o) => o.value === v || o.label === v)
+          return found?.label || v
+        })
+        return labels.join('、')
+      }
+      const found = step.options.find((o) => o.value === value || o.label === value)
+      if (found?.label) return found.label
+    }
+    return undefined
   }
 
   /* ── 收尾 ─────────────────────────────────────── */
@@ -121,33 +135,22 @@ export function useChatFlow() {
     router.replace('/summary')
   }
 
-  /* ── 推进到下一题（0 延迟秒级衔接 + 真人自然流式） ─────── */
+  /* ── 推进到下一题（大模型深度主导 + 真实思考打字节奏） ─────── */
   async function advance(lastAnsweredStep = null, lastAnswerValue = null) {
     const runId = startNewRun()
     typing.value = true
-
-    // 🌟 阶段 1：作答后瞬间 0 毫秒逐字流式打出懂行点评（Live Reaction）
-    if (lastAnsweredStep) {
-      try {
-        const reactionText = await getLiveReaction(lastAnsweredStep, lastAnswerValue, session.answers)
-        if (isRunValid(runId) && reactionText) {
-          await streamSingleMessage(reactionText, `${lastAnsweredStep.id}_reaction`, runId)
-          await delay(280) // 气泡之间的自然微顿
-        }
-      } catch (err) {
-        console.warn('Reaction error:', err)
-      }
-    }
 
     if (session.isFinished) {
       await finish(runId)
       return
     }
 
-    // 🌟 阶段 2：获取下一道深度问题
+    // 🌟 核心：大模型主导！绝不在正常对话中插入死板生硬的模板点评
+    // 思考期间自然呈现 3 点打字动效 (TypingDots)，由大模型统一输出高情商承接与专业追问
     let nextStep = null
     try {
       const aiResult = await fetchNextDynamicQuestion(session.answers, session.messages, session.stepIndex)
+      if (!isRunValid(runId)) return
       if (aiResult?.isReady) {
         session.forceFinish()
         await finish(runId)
@@ -156,13 +159,35 @@ export function useChatFlow() {
       nextStep = aiResult
       session.setDynamicStep(nextStep)
     } catch (err) {
-      console.warn('AI question fetch error:', err)
-      nextStep = session.currentStep
+      console.error('AI question fetch error:', err)
+      if (!isRunValid(runId)) return
+      typing.value = false
+      const retryStep = {
+        id: `retry_step_${Date.now()}`,
+        stage: 'preference',
+        key: 'retry_action',
+        type: 'single',
+        messages: ['AI 思考遇到了网络波动，未能成功生成下一轮追问。你可以点击下方重新生成，或直接查看定制方案。'],
+        options: [
+          { value: '重新生成追问', label: '重新生成追问', emoji: '🔄' },
+          { value: '直接查看定制方案', label: '直接查看定制方案', emoji: '✨' },
+        ],
+        allowCustom: false,
+      }
+      session.setDynamicStep(retryStep)
+      session.pushMessage({
+        role: 'ai',
+        text: retryStep.messages[0],
+        stepId: retryStep.id,
+      })
+      typing.value = false
+      return
     }
+
 
     if (!isRunValid(runId)) return
 
-    // 🌟 阶段 3：逐字流式打印下一题文本
+    // 🌟 逐字流式打印大模型生成的承接与追问（messages[0] 为共鸣承接，messages[1] 为深度追问）
     if (nextStep && nextStep.messages?.length) {
       for (const m of nextStep.messages) {
         if (!isRunValid(runId)) break
@@ -185,7 +210,18 @@ export function useChatFlow() {
 
   function submit(step, value) {
     if (!isCurrent(step)) return
-    session.answer(step, value, displayOf(step, value))
+    if (step.key === 'retry_action') {
+      if (value === '直接查看定制方案') {
+        quickFinish()
+        return
+      }
+      // 重新生成追问：清空重试题，重新发起深度思考
+      advance(step, '')
+      return
+    }
+    const displayText = displayOf(step, value)
+    // 显示标题与提交值分别保存，避免短标题覆盖模型提供的完整回答。
+    session.answer(step, value, displayText)
     advance(step, value)
   }
 
@@ -221,6 +257,10 @@ export function useChatFlow() {
     const runId = startNewRun()
     if (session.isFinished) {
       finish(runId)
+      return
+    }
+    if (session.stepIndex > 0 && !session.activeDynamicStep) {
+      await advance()
       return
     }
     const step = session.currentStep || INITIAL_STEP

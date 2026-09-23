@@ -9,7 +9,7 @@ vi.mock('@/api/request', () => ({
   http: { get: vi.fn(), post: postMock },
 }))
 
-import { generatePlan, normalizePlanningAnswers } from '@/api/realAdapter'
+import { generatePlan, replaceGift, normalizePlanningAnswers } from '@/api/realAdapter'
 import { useSessionStore } from '@/stores/session'
 
 describe('planning answer contract', () => {
@@ -41,6 +41,12 @@ describe('planning answer contract', () => {
       taboo: [],
       style: ['实物礼物'],
     })
+  })
+
+  it('联网替换的请求窗口覆盖后端检索时限', async () => {
+    await replaceGift({ answers: { budget: '1500元' }, gifts: [{ id: 'web-old' }] }, { targetId: 'web-old' })
+    expect(postMock.mock.calls[0][2].timeout).toBe(180000)
+    expect(postMock.mock.calls[0][1].answers.budget).toBe('1500元')
   })
 
   it('only writes summary edits that map safely to one structured field', () => {

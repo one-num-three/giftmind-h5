@@ -13,7 +13,13 @@ import {
   updateLocalShare,
 } from './localShareStore'
 
-import { generateCustomStyleLetter, callMiMo, generateAiPlan } from './mimoService'
+import {
+  generateCustomStyleLetter,
+  callMiMo,
+  generateAiPlan,
+  generateAiSummary,
+  generateAiReplacementGift,
+} from './mimoService'
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -51,14 +57,30 @@ export async function getServiceStatus() {
     state: 'active',
     deepseekConfigured: true,
     voiceConfigured: true,
-    model: 'Xiaomi MiMo & DeepSeek AI 大模型',
-    activeGiftCount: 164,
+    model: 'DeepSeek 全网智能选品大脑',
+    activeGiftCount: '全网实时开放检索',
     promptVersions: {},
   }
 }
 
-export async function generateSummary(answers) {
-  await delay(500)
+export async function generateSummary(answers, messages) {
+  try {
+    const aiSummary = await generateAiSummary(answers, messages)
+    if (aiSummary) {
+      return {
+        requestId: `summary-${Date.now()}`,
+        source: 'ai',
+        summary: {
+          who: { label: '送给谁', text: aiSummary.who, fields: ['recipient'] },
+          story: { label: '为什么送', text: aiSummary.story, fields: ['occasion', 'memory'] },
+          feeling: { label: '想表达什么', text: aiSummary.feeling, fields: ['feeling'] },
+          constraints: { label: '核心偏好与选品范围', text: aiSummary.constraints, fields: ['budget', 'constraints'] },
+        },
+      }
+    }
+  } catch (e) {
+    console.warn('generateAiSummary fallback to composeSummaryBlocks:', e)
+  }
   return {
     requestId: `mock-summary-${Date.now()}`,
     source: 'rule',
@@ -92,7 +114,15 @@ export async function regenerateLetter(plan, { tone, answers } = {}) {
   return generateLetter(plan?.answers || answers || {}, tone)
 }
 
-export async function replaceGift(plan, { targetId } = {}) {
+export async function replaceGift(plan, { targetId, reason = '' } = {}) {
+  try {
+    const replacement = await generateAiReplacementGift(plan, { targetId, reason })
+    if (replacement) {
+      return { targetId, gift: replacement }
+    }
+  } catch (e) {
+    console.warn('replaceGift AI fallback:', e)
+  }
   await delay(700)
   const current = Array.isArray(plan?.gifts) ? plan.gifts : []
   const exclude = current.map((gift) => gift?.catalogId || gift?.id).filter(Boolean)

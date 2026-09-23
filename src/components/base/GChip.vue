@@ -62,6 +62,10 @@ defineProps({
 .g-chip__hint {
   color: var(--c-ink-4);
   font-size: var(--fs-micro);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
 }
 
 .g-chip.selected {

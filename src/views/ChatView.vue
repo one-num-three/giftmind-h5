@@ -36,10 +36,12 @@ const atStart = computed(() => session.stepIndex === 0)
 const asked = computed(() => {
   const s = step.value
   if (!s) return false
+  if (s.key === 'retry_action') return true
   const hasCopy = (s.messages || []).some((t) => typeof t === 'string' && t.trim())
   if (!hasCopy) return true // 剧本没写提问文案，就别把用户卡住
   return session.messages.some((m) => m.role === 'ai' && m.stepId === s.id)
 })
+
 
 /** 底部交互形态：完全由 currentStep.type 决定；剧本没给选项就退回输入框 */
 const mode = computed(() => {
@@ -55,7 +57,7 @@ const voiceAvailable = computed(() => isMock || Boolean(planStore.serviceStatus?
 
 /* ── 消息流 ───────────────────────────────────── */
 const bubbles = computed(() =>
-  session.messages.map((m, i, arr) => {
+  session.messages.filter((m) => m.role !== 'system').map((m, i, arr) => {
     const role = m.role === 'user' ? 'user' : 'ai'
     const prev = arr[i - 1]
     const lead = !prev || (prev.role === 'user' ? 'user' : 'ai') !== role
@@ -99,9 +101,12 @@ const composerHint = computed(() => {
 
 function onSubmit(value) {
   submit(step.value, value)
+  customMode.value = false
+  customBase.value = []
 }
 function onSkip() {
   customMode.value = false
+  customBase.value = []
   skipStep(step.value)
 }
 function onCustom(base) {
@@ -109,16 +114,20 @@ function onCustom(base) {
   customMode.value = true
 }
 function onComposerSubmit(text) {
+  const clean = typeof text === 'string' ? text.trim() : ''
+  if (!clean) return
+
   if (customMode.value && step.value?.type === 'multi') {
-    const combined = [...customBase.value, text]
-    customMode.value = false
-    customBase.value = []
+    const combined = [...customBase.value, clean]
     onSubmit(combined)
     return
   }
-  customMode.value = false
-  customBase.value = []
-  onSubmit(text)
+
+  // 🌟 核心修复：立即同步提交，0ms 瞬间把消息打上屏幕并进入 AI 思考，绝不阻塞 UI 导致跳回选项
+  onSubmit(clean)
+
+  // 长文本后台静默辅助解析，绝不卡住主线程交互
+  // 原文已经进入会话；不再异步回填推测槽位，避免覆盖后续纠正或改变轮次。
 }
 
 /** 键盘弹起后把输入区顶到可见位置 */
@@ -191,7 +200,10 @@ onUnmounted(() => {
       >
         <GIcon :name="atStart ? 'close' : 'back'" :size="20" />
       </button>
-      <div class="chat__brand" role="heading" aria-level="1" data-route-focus>GiftMind</div>
+      <div class="chat__brand" role="heading" aria-level="1" data-route-focus>
+        GiftMind
+        <span class="chat__ai-engine-tag" title="DeepSeek Flash (v4代经济型实时思考引擎已就绪)">DeepSeek Flash</span>
+      </div>
       <div class="chat__head-right">
         <!-- ⚡ 极速 / ☕ 沉浸 速率切换按钮 -->
         <button
@@ -215,6 +227,19 @@ onUnmounted(() => {
         <div v-else class="chat__stage">{{ session.stageText }}</div>
       </div>
     </header>
+
+    <!-- 🌟 心理学与买手人情动态洞察画像徽标栏 -->
+    <div v-if="session.insightBadges && session.insightBadges.length" class="chat__badges scroll-x">
+      <div
+        v-for="badge in session.insightBadges"
+        :key="badge.text"
+        class="chat__badge-tag"
+        :class="`chat__badge--${badge.tone}`"
+      >
+        <span class="chat__badge-icon">{{ badge.icon }}</span>
+        <span class="chat__badge-text">{{ badge.text }}</span>
+      </div>
+    </div>
 
     <div ref="streamRef" class="chat__stream scroll-y">
       <div class="chat__list">
@@ -307,6 +332,54 @@ onUnmounted(() => {
   background: var(--c-paper);
   flex-shrink: 0;
 }
+
+/* ── 顶部人情画像徽标栏 ── */
+.chat__badges {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 6px var(--s-3) 8px;
+  background: var(--c-paper);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  white-space: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.chat__badges::-webkit-scrollbar {
+  display: none;
+}
+.chat__badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #555;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+.chat__badge--work { background: rgba(30, 41, 59, 0.06); color: #1e293b; border-color: rgba(30, 41, 59, 0.15); }
+.chat__badge--love { background: rgba(236, 72, 153, 0.08); color: #be185d; border-color: rgba(236, 72, 153, 0.2); }
+.chat__badge--elder { background: rgba(217, 119, 6, 0.08); color: #b45309; border-color: rgba(217, 119, 6, 0.2); }
+.chat__badge--kid { background: rgba(59, 130, 246, 0.08); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.2); }
+.chat__badge--friend { background: rgba(16, 185, 129, 0.08); color: #047857; border-color: rgba(16, 185, 129, 0.2); }
+.chat__badge--tea { background: rgba(16, 185, 129, 0.08); color: #047857; border-color: rgba(16, 185, 129, 0.2); }
+.chat__badge--outdoor { background: rgba(245, 158, 11, 0.08); color: #b45309; border-color: rgba(245, 158, 11, 0.2); }
+.chat__badge--nature { background: rgba(101, 163, 13, 0.08); color: #4d7c0f; border-color: rgba(101, 163, 13, 0.2); }
+.chat__badge--desk { background: rgba(100, 116, 139, 0.08); color: #334155; border-color: rgba(100, 116, 139, 0.2); }
+.chat__badge--travel { background: rgba(14, 165, 233, 0.08); color: #0369a1; border-color: rgba(14, 165, 233, 0.2); }
+.chat__badge--black { background: rgba(15, 23, 42, 0.08); color: #0f172a; border-color: rgba(15, 23, 42, 0.2); }
+.chat__badge--classic { background: rgba(120, 53, 15, 0.08); color: #78350f; border-color: rgba(120, 53, 15, 0.2); }
+.chat__badge--quick { background: rgba(13, 148, 136, 0.08); color: #0f766e; border-color: rgba(13, 148, 136, 0.2); }
+.chat__badge--ritual { background: rgba(147, 51, 234, 0.08); color: #7e22ce; border-color: rgba(147, 51, 234, 0.2); }
+.chat__badge--ease { background: rgba(37, 99, 235, 0.08); color: #1d4ed8; border-color: rgba(37, 99, 235, 0.2); }
+.chat__badge--respect { background: rgba(225, 29, 72, 0.08); color: #be123c; border-color: rgba(225, 29, 72, 0.2); }
+.chat__badge--budget { background: rgba(234, 88, 12, 0.08); color: #c2410c; border-color: rgba(234, 88, 12, 0.2); }
 .chat__back {
   width: 44px;
   height: 44px;
@@ -328,6 +401,32 @@ onUnmounted(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+.chat__ai-engine-tag {
+  font-size: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  margin-left: 6px;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chat__ai-engine-tag::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #10b981;
+  display: inline-block;
+  box-shadow: 0 0 6px #10b981;
 }
 .chat__stage {
   display: inline-flex;

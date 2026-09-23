@@ -50,6 +50,7 @@ function text(v) {
 
 const g = computed(() => (props.gift && typeof props.gift === 'object' ? props.gift : {}))
 
+const sources = computed(() => toArray(g.value.sources).filter((item) => /^https?:\/\//i.test(item?.url || '')))
 const emoji = computed(() => text(g.value.emoji) || '🎁')
 const name = computed(() => recipientAwareCopy(g.value.name, props.recipient) || '一件还没起名的礼物')
 const selectionKey = computed(() => (
@@ -213,6 +214,10 @@ function onSelect() {
 
       <div class="gift__summary">
         <p class="gift__why">{{ explanation.fitReason }}</p>
+        <div v-if="sources.length" class="gift__sources">
+          <p>本次检索来源 · 价格与库存以下单页面为准</p>
+          <a v-for="source in sources" :key="source.url" :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title || '查看网页来源' }}</a>
+        </div>
         <p v-if="featuredDetail" class="gift__match">
           <GIcon name="sparkle" :size="14" />
           <span>{{ featuredDetail }}</span>
@@ -224,6 +229,31 @@ function onSelect() {
             <GIcon name="clock" :size="13" />
             {{ explanation.leadTime }}
           </span>
+        </div>
+
+        <!-- 🌟 电商实时搜索与比价直达 -->
+        <div class="gift__ecommerce">
+          <a
+            :href="g.ecommerceLinks?.taobaoUrl || `https://s.taobao.com/search?q=${encodeURIComponent(name)}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="ecommerce-btn ecommerce-btn--taobao tap"
+            title="跳转淘宝查看实时在售商品与买家秀"
+          >
+            <span class="ecommerce-btn__icon">🛒</span>
+            <span>去淘宝搜同款</span>
+            <GIcon name="arrowRight" :size="12" />
+          </a>
+          <a
+            :href="g.ecommerceLinks?.jdUrl || `https://search.jd.com/Search?keyword=${encodeURIComponent(name)}`"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="ecommerce-btn ecommerce-btn--jd tap"
+            title="跳转京东搜索自营品质好物"
+          >
+            <span class="ecommerce-btn__icon">⚡</span>
+            <span>京东搜索</span>
+          </a>
         </div>
       </div>
 
@@ -331,6 +361,8 @@ function onSelect() {
 </template>
 
 <style scoped>
+.gift__sources { display: grid; gap: 8px; margin: 12px 0; font-size: var(--fs-caption); overflow-wrap: anywhere; }
+.gift__sources a { color: var(--c-rose-deep); text-decoration: underline; }
 .gift {
   position: relative;
 }
@@ -466,6 +498,41 @@ function onSelect() {
   border: 1px solid color-mix(in srgb, var(--c-rose) 18%, var(--c-line));
   border-radius: var(--r-md);
   background: color-mix(in srgb, var(--c-surface) 88%, transparent);
+}
+.gift__ecommerce {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.08);
+}
+.ecommerce-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+.ecommerce-btn--taobao {
+  background: rgba(255, 80, 0, 0.08);
+  color: #ff5000;
+  border: 1px solid rgba(255, 80, 0, 0.25);
+}
+.ecommerce-btn--taobao:hover {
+  background: rgba(255, 80, 0, 0.16);
+}
+.ecommerce-btn--jd {
+  background: rgba(225, 37, 27, 0.08);
+  color: #e1251b;
+  border: 1px solid rgba(225, 37, 27, 0.25);
+}
+.ecommerce-btn--jd:hover {
+  background: rgba(225, 37, 27, 0.16);
 }
 .gift__why {
   margin: 0;

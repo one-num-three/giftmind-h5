@@ -2,26 +2,26 @@
 export const GENERATING_STEPS = [
   {
     key: 'read',
-    label: '正在读你们的故事',
-    hint: '把你说的每一句话拆成线索',
+    label: '正在梳理对话中的每一条细节',
+    hint: '把你说过的每一句话拆成专属心意线索',
     duration: 1100,
   },
   {
     key: 'profile',
-    label: '正在拼出 TA 的样子',
-    hint: '性格、偏好、忌讳，逐条对齐',
+    label: '正在立体还原 TA 的真实喜好',
+    hint: '圈层偏好、生活场景与核心诉求深度对齐',
     duration: 1200,
   },
   {
     key: 'match',
-    label: '正在从 2,400 件礼物里筛选',
-    hint: '预算、时间、可获得性三重过滤',
+    label: '正在全网检索高口碑心意好物',
+    hint: '品牌、型号、真实市价与各大电商口碑实时比对',
     duration: 1400,
   },
   {
     key: 'write',
-    label: '正在替你写那封信',
-    hint: '不煽情，只说真的',
+    label: '正在构思量身定制的心意信件',
+    hint: '字字真挚，恪守人伦角色分寸',
     duration: 1300,
   },
   {

@@ -2,13 +2,11 @@
 /**
  * SummaryView —— 生成方案前的摘要确认
  *
- * 访谈结束后先到这里：TA 是谁 / 你们的故事 / 这次想表达什么 / 预算与约束，
- * 四块都可以直接改。确认后把修改写回 answers，再走原有生成流程。
- * 约束块是展示性的自由备注：预算/时间/禁忌的硬过滤仍以结构化字段为准。
+ * 按实际聊过的问题确认回答，修改直接写回原字段；支持继续聊天或联网选礼。
  */
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '@/api'
+import { composeConsultationBlocks } from '@/utils/summaryCompose'
 import { useSessionStore } from '@/stores/session'
 import { useUiStore } from '@/stores/ui'
 import GNavBar from '@/components/base/GNavBar.vue'
@@ -18,30 +16,18 @@ const router = useRouter()
 const session = useSessionStore()
 const ui = useUiStore()
 
-const BLOCK_ORDER = ['who', 'story', 'feeling', 'constraints']
-const DEFAULT_LABELS = {
-  who: '送给谁',
-  story: '为什么送',
-  feeling: '想表达什么',
-  constraints: '必须满足',
-}
-const EDITABLE_BLOCKS = new Set(['story', 'feeling'])
-const REVISIT_STEP = { who: 'recipient', constraints: 'budget' }
+const blocks = ref([])
+const BLOCK_ORDER = computed(() => blocks.value.map((block) => block.key))
 
 const loading = ref(true)
-const source = ref('rule')
 const edits = reactive({})
-const labels = reactive({ ...DEFAULT_LABELS })
+const labels = reactive({})
 let alive = true
 
 const answeredCount = computed(() => session.answeredCount)
 
 function blockText(key) {
   return typeof edits[key] === 'string' ? edits[key] : ''
-}
-
-function isEditable(key) {
-  return EDITABLE_BLOCKS.has(key)
 }
 
 function autoGrow(el) {
@@ -62,15 +48,11 @@ async function load() {
   }
   loading.value = true
   try {
-    const result = await api.generateSummary(session.answers)
-    if (!alive) return
-    const summary = result?.summary && typeof result.summary === 'object' ? result.summary : {}
-    for (const key of BLOCK_ORDER) {
-      const block = summary[key]
-      edits[key] = typeof block?.text === 'string' ? block.text : ''
-      labels[key] = typeof block?.label === 'string' ? block.label : DEFAULT_LABELS[key]
+    blocks.value = composeConsultationBlocks(session.answers, session.answerSteps, session.messages)
+    for (const block of blocks.value) {
+      edits[block.key] = block.text
+      labels[block.key] = block.label
     }
-    source.value = result?.source || 'rule'
   } catch {
     if (alive) ui.error('摘要没有取到，请重试')
   } finally {
@@ -80,12 +62,13 @@ async function load() {
 
 function confirm() {
   if (loading.value) return
-  session.applySummaryEdits({ ...edits })
+  session.applyConsultationEdits({ ...edits })
   router.replace('/generating')
 }
 
-function backToChat(key = 'who') {
-  session.revisit(REVISIT_STEP[key] || 'recipient')
+function backToChat() {
+  session.applyConsultationEdits({ ...edits })
+  session.resumeConsultation()
   router.replace('/chat')
 }
 
@@ -101,7 +84,7 @@ onUnmounted(() => {
 
     <div class="page__body sum">
       <p class="sum__lead">
-        故事和心意可以直接改；对象、预算与时间会影响筛选，需要回到选择题修改。
+        这里保留了刚才实际聊到的内容，都可以直接修改；没聊过的内容不会替你补写。
       </p>
 
       <template v-if="!loading">
@@ -112,23 +95,20 @@ onUnmounted(() => {
         >
           <p class="sum__label">
             <span>{{ labels[key] }}</span>
-            <small>{{ isEditable(key) ? '可直接修改' : '来自你的选择' }}</small>
+            <small>可直接修改</small>
           </p>
           <textarea
-            v-if="isEditable(key)"
             class="sum__area"
             rows="2"
+            placeholder="这一项已跳过，可以留空或补充"
             :value="blockText(key)"
+            :aria-label="labels[key]"
             @input="onInput(key, $event)"
             @focus="(e) => autoGrow(e.target)"
           />
-          <div v-else class="sum__fixed">
-            <p>{{ blockText(key) }}</p>
-            <button type="button" @click="backToChat(key)">修改这些选项</button>
-          </div>
         </section>
 
-        <p v-if="source === 'rule'" class="sum__meta">根据你的回答整理 · 可直接修改</p>
+        <p class="sum__meta">来自本次对话 · 修改会同步用于联网选礼</p>
       </template>
 
       <div v-else class="sum__loading">
@@ -138,8 +118,8 @@ onUnmounted(() => {
     </div>
 
     <div class="sum__footer">
-      <GButton variant="ghost" @click="backToChat('who')">重新检查选项</GButton>
-      <GButton variant="dark" block :disabled="loading" @click="confirm">就按这些来</GButton>
+      <GButton variant="ghost" @click="backToChat()">继续聊聊</GButton>
+      <GButton variant="dark" block :disabled="loading || !blocks.length" @click="confirm">确认并联网找礼物</GButton>
     </div>
   </div>
 </template>
@@ -194,24 +174,6 @@ onUnmounted(() => {
 .sum__area:focus {
   box-shadow: inset 0 0 0 1px var(--c-rose);
   outline: none;
-}
-.sum__fixed {
-  padding: 12px 14px;
-  background: var(--c-paper);
-  border-radius: var(--r-sm);
-  box-shadow: inset 0 0 0 1px var(--c-line);
-}
-.sum__fixed p {
-  color: var(--c-ink);
-  font-size: var(--fs-body);
-  line-height: 1.7;
-}
-.sum__fixed button {
-  min-height: 40px;
-  margin-top: var(--s-2);
-  color: var(--c-rose-deep);
-  font-size: var(--fs-caption);
-  font-weight: 700;
 }
 .sum__meta {
   text-align: center;

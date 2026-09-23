@@ -18,8 +18,8 @@ export const H5_ENDPOINTS = Object.freeze({
 
 export const GENERATION_STAGES = Object.freeze([
   { key: 'read', label: '正在读取你的回答', hint: '把关系、故事和期待整理成线索' },
-  { key: 'catalog', label: '正在筛选礼物库', hint: '先排除预算、时间和禁忌不合适的选项' },
-  { key: 'compare', label: '正在生成四类榜单', hint: '分别比较推荐度、适配度、特别度和可执行度' },
+  { key: 'search', label: '正在联网寻找礼物', hint: '让模型根据本次对话检索具体商品与来源' },
+  { key: 'compare', label: '正在比较不同选择', hint: '结合使用场景、偏好和预算解释取舍' },
   { key: 'reason', label: '正在写推荐理由', hint: '把礼物和你们的故事连接起来' },
   { key: 'compose', label: '正在整理信件与仪式', hint: '让心意最后落到可以执行的细节里' },
 ])
@@ -61,6 +61,7 @@ export function normalizeServiceStatus(raw) {
   const count = Math.max(0, Number(data.activeGiftCount) || 0)
   let state = SERVICE_STATE.connected
   if (!data.ok) state = SERVICE_STATE.unavailable
+  else if (data.mode === 'web_search') state = data.deepseekConfigured && data.searchConfigured ? SERVICE_STATE.connected : SERVICE_STATE.unavailable
   else if (!count) state = SERVICE_STATE.emptyCatalog
   else if (!data.deepseekConfigured) state = SERVICE_STATE.ruleFallback
 
@@ -68,6 +69,8 @@ export function normalizeServiceStatus(raw) {
     ok: Boolean(data.ok),
     state,
     deepseekConfigured: Boolean(data.deepseekConfigured),
+    searchConfigured: Boolean(data.searchConfigured),
+    mode: data.mode || '',
     voiceConfigured: Boolean(data.voiceConfigured),
     model: typeof data.model === 'string' ? data.model : '',
     activeGiftCount: count,

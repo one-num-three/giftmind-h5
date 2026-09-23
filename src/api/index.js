@@ -15,13 +15,13 @@ const adapter = USE_MOCK ? mock : real
 export const isMock = USE_MOCK
 
 /** 检查 FastAPI、DeepSeek 与推荐池状态。 */
-export const getServiceStatus = (...args) => adapter.getServiceStatus(...args)
+export const getServiceStatus = (...args) => real.getServiceStatus(...args)
 
 /** 生成摘要确认页的四块内容 */
 export const generateSummary = (...args) => adapter.generateSummary(...args)
 
 /** 生成完整送礼方案（可流式：传 onProgress 接收阶段性文案） */
-export const generatePlan = (...args) => adapter.generatePlan(...args)
+export const generatePlan = (...args) => real.generatePlan(...args)
 
 /** 单条追问 / 自由对话（预留：把用户的补充说明交给 LLM） */
 export const chatOnce = (...args) => adapter.chatOnce(...args)
@@ -30,7 +30,7 @@ export const chatOnce = (...args) => adapter.chatOnce(...args)
 export const regenerateLetter = (...args) => adapter.regenerateLetter(...args)
 
 /** 只替换当前方案中的一件礼物。 */
-export const replaceGift = (...args) => adapter.replaceGift(...args)
+export const replaceGift = (...args) => real.replaceGift(...args)
 
 /** 只重写仪式，不修改礼物和信件。 */
 export const rewriteRitual = (...args) => adapter.rewriteRitual(...args)
@@ -39,7 +39,7 @@ export const rewriteRitual = (...args) => adapter.rewriteRitual(...args)
 export const composeDelivery = (...args) => adapter.composeDelivery(...args)
 
 /** 换一批礼物 */
-export const shuffleGifts = (...args) => adapter.shuffleGifts(...args)
+export const shuffleGifts = (...args) => real.shuffleGifts(...args)
 
 /** 创建分享链接 */
 export const createShare = (...args) => adapter.createShare(...args)
