@@ -165,7 +165,7 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
 2. 提问切入关键决策分歧，只问送礼人日常肉眼可见的事实，不问生僻黑话；选项提供贴近日常认知的选项及稳妥兜底项。
 3. 这是供你权衡的思路，不是逐项完成的清单。
 
-为了界面渲染，请返回 JSON 对象。isReady 表示是否进入确认；继续交流时 messages 为你要说的话组成的字符串数组，key 为本轮记录标识。options 为可选回答数组，可为空；每项包含 label（显示文字）、value（用户选中后提交的回答文本），可附 desc 和 emoji。type 可为 single、multi 或 text。内容、数量和组织方式由你决定。`
+为了界面渲染，请返回 JSON 对象。isReady 表示是否进入确认；继续交流时 messages 为你要说的话组成的字符串数组，key 为本轮记录标识。options 为可选回答数组，数量适中（约三四个）；每项 label 必须极其精简（严格控制在 10 个字以内，如 "复古金属细手链"、"小巧设计感耳饰"），严禁在选项文字后追加冒号、括号或大段举例说明；value 为用户选中后提交的回答文本，可附 emoji。type 可为 single、multi 或 text。内容、数量和组织方式由你决定。`
 
   const userContent = `【完整对话记录】
 ${recentDialogHistory || '（刚开始对话）'}
@@ -206,12 +206,20 @@ ${JSON.stringify(answers, null, 2)}
       const options = (Array.isArray(parsed.options) ? parsed.options : [])
         .filter((opt) => opt && typeof opt === 'object')
         .map((opt) => {
-          const label = cleanStr(opt.label) || cleanStr(opt.value)
+          let label = cleanStr(opt.label) || cleanStr(opt.value)
+          // 剥离冒号、破折号或括号后的长串举例与解释，确保选项精炼干净
+          label = label.replace(/[：:][^]*$/, '').replace(/\([^)]*\)/g, '').replace(/（[^）]*）/g, '').trim()
+          if (label.includes(' / ')) label = label.split(' / ')[0].trim()
+          // 严格保证在 10 个字以内
+          if (label.length > 10) {
+            label = label.slice(0, 10).trim()
+          }
           const value = cleanStr(opt.value) || label
           const desc = cleanStr(opt.desc || opt.hint)
           return { label, value, desc, hint: desc, emoji: cleanStr(opt.emoji) }
         })
         .filter((opt) => opt.label && opt.value)
+        .slice(0, 4)
 
       if (cleanedMessages.length) {
         return {

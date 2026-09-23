@@ -97,7 +97,6 @@ onUnmounted(() => {
         v-for="opt in options"
         :key="opt.value"
         :emoji="opt.emoji"
-        :hint="opt.hint || opt.desc"
         :selected="isOn(opt.value)"
         :disabled="isOff(opt.value)"
         @click="onTap(opt)"
@@ -155,6 +154,12 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
+  max-height: 175px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.choice__chips::-webkit-scrollbar {
+  display: none;
 }
 
 .choice__links {
