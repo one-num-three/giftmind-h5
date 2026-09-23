@@ -13,7 +13,7 @@ export async function callJevSystemOne({ state, questions, timeout = 6000 }) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
 
-  const isDevVite = typeof window !== 'undefined' && window.location?.port === '5173'
+  const isDevVite = import.meta.env?.DEV || (typeof window !== 'undefined' && Boolean(window.location?.port))
   const endpoint = isDevVite ? '/jev-proxy/v1/systemone' : '/api/jev/systemone'
 
   try {
