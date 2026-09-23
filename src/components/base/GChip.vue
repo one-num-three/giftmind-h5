@@ -38,9 +38,9 @@ defineProps({
   max-width: 100%;
 }
 .size-md {
-  height: 44px;
-  padding: 0 15px;
-  font-size: var(--fs-sm);
+  min-height: 38px;
+  padding: 6px 13px;
+  font-size: 13px;
 }
 .size-sm {
   height: 28px;

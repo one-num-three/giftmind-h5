@@ -181,14 +181,15 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
   "messages": string[],
   "key": string,
   "options": [
-    {"label": "显示文字", "value": "用户选中提交的文本", "desc": "解释", "emoji": "图标"}
+    {"label": "精炼文字(10字内)", "value": "用户选中提交的文本", "emoji": "图标"}
   ],
   "type": "single" | "multi" | "text",
   "extracted_traits": {
     "key": "value"
   },
   "suggested_domain": string
-}`
+}
+注意：options 数量适中（约三四个）；每项 label 必须极其精简（严格控制在 10 个字以内，如 "复古金属细手链"、"小巧设计感耳饰"），严禁在选项文字后追加冒号、括号或大段举例说明；无需返回 desc 和 hint。`
 
   const userContent = `【完整对话记录】
 ${recentDialogHistory || '（刚开始对话）'}
@@ -235,12 +236,20 @@ ${traitsBlackboard}
       const options = (Array.isArray(parsed.options) ? parsed.options : [])
         .filter((opt) => opt && typeof opt === 'object')
         .map((opt) => {
-          const label = cleanStr(opt.label) || cleanStr(opt.value)
+          let label = cleanStr(opt.label) || cleanStr(opt.value)
+          // 剥离冒号、破折号或括号后的长串举例与解释，确保选项精炼干净
+          label = label.replace(/[：:][^]*$/, '').replace(/\([^)]*\)/g, '').replace(/（[^）]*）/g, '').trim()
+          if (label.includes(' / ')) label = label.split(' / ')[0].trim()
+          // 严格保证在 10 个字以内
+          if (label.length > 10) {
+            label = label.slice(0, 10).trim()
+          }
           const value = cleanStr(opt.value) || label
           const desc = cleanStr(opt.desc || opt.hint)
           return { label, value, desc, hint: desc, emoji: cleanStr(opt.emoji) }
         })
         .filter((opt) => opt.label && opt.value)
+        .slice(0, 4)
 
       if (cleanedMessages.length) {
         return {
