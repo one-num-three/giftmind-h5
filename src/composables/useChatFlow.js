@@ -149,8 +149,23 @@ export function useChatFlow() {
     // 思考期间自然呈现 3 点打字动效 (TypingDots)，由大模型统一输出高情商承接与专业追问
     let nextStep = null
     try {
-      const aiResult = await fetchNextDynamicQuestion(session.answers, session.messages, session.stepIndex)
+      const aiResult = await fetchNextDynamicQuestion(
+        session.answers,
+        session.messages,
+        session.stepIndex,
+        session.traits12
+      )
       if (!isRunValid(runId)) return
+
+      // 🌟 Jev 动态 12 特质管理：交由 Jev 审核并同步入槽
+      if (aiResult?.extracted_traits || aiResult?.suggested_domain || aiResult?.suggested_slots) {
+        session.syncDynamicTraits(
+          aiResult.extracted_traits || {},
+          aiResult.suggested_domain || '',
+          aiResult.suggested_slots || []
+        )
+      }
+
       if (aiResult?.isReady) {
         session.forceFinish()
         await finish(runId)
@@ -222,6 +237,7 @@ export function useChatFlow() {
     const displayText = displayOf(step, value)
     // 显示标题与提交值分别保存，避免短标题覆盖模型提供的完整回答。
     session.answer(step, value, displayText)
+    session.syncDynamicTraits()
     advance(step, value)
   }
 

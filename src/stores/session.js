@@ -8,6 +8,7 @@ import { CHAT_FLOW, stageLabel } from '@/config/flow'
 import { uid } from '@/utils/helpers'
 import storage from '@/utils/storage'
 import { buildDialogStateCanvas } from '@/services/jevEngine'
+import { createInitial12Traits, morphDynamicTraitsByDomain, evaluateAndFill12Traits } from '@/services/jevTraitsManager'
 
 const DRAFT_KEY = 'gm_draft_session'
 const RECOVERY_FIELDS = new Set(['budget', 'timing'])
@@ -23,6 +24,7 @@ export const useSessionStore = defineStore('session', {
     startedAt: 0,
     activeDynamicStep: null,
     isAiReady: false,
+    dynamic12Traits: createInitial12Traits(),
   }),
 
   getters: {
@@ -45,6 +47,10 @@ export const useSessionStore = defineStore('session', {
       return step ? stageLabel(step.stage) : '生成方案'
     },
     answeredCount: (s) => Object.keys(s.answers).length,
+    /** 🌟 12 维动态心意特质卡槽 Getter */
+    traits12: (s) => s.dynamic12Traits || [],
+    filledTraitsCount: (s) => (s.dynamic12Traits || []).filter((t) => t.isFilled).length,
+    traitsProgress: (s) => Math.round(((s.dynamic12Traits || []).filter((t) => t.isFilled).length / 12) * 100),
     /** 🌟 Jev 驱动的买手人情动态洞察画像徽标 */
     insightBadges(s) {
       const badges = []
@@ -164,9 +170,25 @@ export const useSessionStore = defineStore('session', {
         this.stepIndex = 0
         this.activeDynamicStep = null
         this.isAiReady = false
+        this.dynamic12Traits = createInitial12Traits()
         this.startedAt = Date.now()
       }
       this.status = 'asking'
+    },
+
+    /** 🌟 Jev 驱动的 12 维动态心意特质同步与审核入槽 */
+    syncDynamicTraits(extractedCandidate = {}, domain = '', suggestedSlots = []) {
+      if (!this.dynamic12Traits || this.dynamic12Traits.length !== 12) {
+        this.dynamic12Traits = createInitial12Traits()
+      }
+      // 1. 若识别到品类或模型建议槽位，动态调整 8 维自适应槽位
+      if (domain || (Array.isArray(suggestedSlots) && suggestedSlots.length >= 2)) {
+        this.dynamic12Traits = morphDynamicTraitsByDomain(this.dynamic12Traits, domain, suggestedSlots)
+      }
+      // 2. Jev 严格裁决：符合的填入，不符合/模糊的不填
+      this.dynamic12Traits = evaluateAndFill12Traits(this.dynamic12Traits, extractedCandidate, this.answers)
+      this.persistDraft()
+      return this.dynamic12Traits
     },
 
     pushMessage(msg) {
@@ -326,6 +348,7 @@ export const useSessionStore = defineStore('session', {
         startedAt: this.startedAt,
         activeDynamicStep: this.activeDynamicStep,
         isAiReady: this.isAiReady,
+        dynamic12Traits: this.dynamic12Traits,
       })
     },
 
@@ -337,6 +360,9 @@ export const useSessionStore = defineStore('session', {
         ...d,
         answerSteps: d.answerSteps || {},
         messages: (d.messages || []).map((m) => ({ ...m, streaming: false })),
+        dynamic12Traits: Array.isArray(d.dynamic12Traits) && d.dynamic12Traits.length === 12
+          ? d.dynamic12Traits
+          : createInitial12Traits(),
         status: 'asking',
       }
       Object.assign(this, restored)
