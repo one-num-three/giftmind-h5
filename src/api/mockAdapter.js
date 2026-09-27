@@ -15,11 +15,11 @@ import {
 
 import {
   generateCustomStyleLetter,
-  callMiMo,
+  callChatModel,
   generateAiPlan,
   generateAiSummary,
   generateAiReplacementGift,
-} from './mimoService'
+} from './aiService'
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -91,7 +91,7 @@ export async function generateSummary(answers, messages) {
 export async function chatOnce({ messages }) {
   const last = messages?.[messages.length - 1]?.content || ''
   try {
-    const reply = await callMiMo([
+    const reply = await callChatModel([
       { role: 'system', content: '你是资深高情商礼物顾问 GiftMind。请亲切、懂行地回答用户的追问或建议（60字以内）。' },
       { role: 'user', content: last }
     ], { temperature: 0.7, timeout: 5000 })

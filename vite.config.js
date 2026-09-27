@@ -41,7 +41,10 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/jev-proxy/, ''),
           headers: {
-            ...(process.env.JEV_API_KEY ? { Authorization: `Bearer ${process.env.JEV_API_KEY}` } : {}),
+            // .env（loadEnv）与真实环境变量都认，key 只留在本机不入库
+            ...((env.JEV_API_KEY || process.env.JEV_API_KEY)
+              ? { Authorization: `Bearer ${env.JEV_API_KEY || process.env.JEV_API_KEY}` }
+              : {}),
           },
         },
         // 真实后端联调时打开：把 /api 代理到网关，避免跨域

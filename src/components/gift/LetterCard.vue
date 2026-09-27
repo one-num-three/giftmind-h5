@@ -9,7 +9,7 @@
 import { ref, computed } from 'vue'
 import { copyText } from '@/utils/helpers'
 import { useUiStore } from '@/stores/ui'
-import { generateCustomStyleLetter } from '@/api/mimoService'
+import { generateCustomStyleLetter } from '@/api/aiService'
 
 const props = defineProps({
   letter: { type: Object, default: () => ({}) },

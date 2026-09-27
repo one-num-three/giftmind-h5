@@ -20,7 +20,7 @@ const router = useRouter()
 const session = useSessionStore()
 const planStore = usePlanStore()
 const ui = useUiStore()
-const { typing, speedMode, toggleSpeedMode, submit, skipStep, goBack, quickFinish, defer } = useChatFlow()
+const { typing, speedMode, toggleSpeedMode, paceMode, togglePaceMode, submit, skipStep, goBack, defer } = useChatFlow()
 
 const streamRef = ref(null)
 const footRef = ref(null)
@@ -30,7 +30,6 @@ const customMode = ref(false)
 const customBase = ref([])
 
 const step = computed(() => session.currentStep)
-const atStart = computed(() => session.stepIndex === 0)
 
 /** 这一题的提问已经落到消息流里了吗？没问完就不给交互区 */
 const asked = computed(() => {
@@ -140,14 +139,16 @@ function onComposerFocus() {
 
 /* ── 顶部返回 ─────────────────────────────────── */
 
+/** 左上角 = 完全退出对话（统一行为，不再兼职"返回上一题"） */
 function onBack() {
-  if (atStart.value) {
-    exitOpen.value = true
-  } else {
-    const old = goBack()
-    customBase.value = Array.isArray(old) ? [...old] : []
-    customMode.value = false
-  }
+  exitOpen.value = true
+}
+
+/** 返回上一题：仅撤销上一步作答，消息流保留，重新展示上一题的选项 */
+function onPrev() {
+  const old = goBack()
+  customBase.value = Array.isArray(old) ? [...old] : []
+  customMode.value = false
 }
 
 function confirmExit() {
@@ -195,16 +196,30 @@ onUnmounted(() => {
     <header class="chat__head">
       <button
         class="chat__back tap"
-        :aria-label="atStart ? '退出对话' : '返回上一题'"
+        aria-label="退出对话"
+        title="退出对话"
         @click="onBack"
       >
-        <GIcon :name="atStart ? 'close' : 'back'" :size="20" />
+        <GIcon name="close" :size="20" />
       </button>
       <div class="chat__brand" role="heading" aria-level="1" data-route-focus>
         GiftMind
         <span class="chat__ai-engine-tag" title="DeepSeek Flash (v4代经济型实时思考引擎已就绪)">DeepSeek Flash</span>
       </div>
       <div class="chat__head-right">
+        <!-- ↩ 返回上一题（重新选择上一题的答案） -->
+        <button
+          v-if="session.stepIndex > 0"
+          class="chat__prev-btn tap"
+          type="button"
+          aria-label="返回上一题"
+          title="回到上一题重新选择"
+          @click="onPrev"
+        >
+          <GIcon name="back" :size="14" />
+          <span>上一题</span>
+        </button>
+
         <!-- ⚡ 极速 / ☕ 沉浸 速率切换按钮 -->
         <button
           class="chat__speed-btn tap"
@@ -219,10 +234,13 @@ onUnmounted(() => {
         <button
           v-if="session.stepIndex >= 2"
           class="chat__quick-btn tap"
+          :class="{ 'chat__quick-btn--active': paceMode === 'fast' }"
           type="button"
-          @click="quickFinish"
+          :title="paceMode === 'fast' ? '已加速：只问关键项，点击恢复细致追问' : '等不及了？点击加速，之后只问关键问题、大幅拉快进度'"
+          @click="togglePaceMode"
         >
-          <span>✨ 看方案</span>
+          <span v-if="paceMode === 'fast'">🐢 恢复细致</span>
+          <span v-else>⏩ 快点问</span>
         </button>
         <div v-else class="chat__stage">{{ session.stageText }}</div>
       </div>
@@ -462,6 +480,27 @@ onUnmounted(() => {
   transition: all 0.2s ease;
   user-select: none;
 }
+.chat__prev-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--c-bg-subtle, #f3f4f6);
+  color: var(--c-ink-2, #4b5563);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--c-border, #e5e7eb);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+.chat__prev-btn:active {
+  transform: scale(0.95);
+  background: var(--c-rose-tint, #fff1f2);
+  color: var(--c-rose, #f43f5e);
+}
 .chat__speed-btn:active {
   transform: scale(0.95);
   background: var(--c-rose-tint, #fff1f2);
@@ -480,11 +519,12 @@ onUnmounted(() => {
   border: none;
   box-shadow: 0 2px 8px rgba(244, 63, 94, 0.3);
   cursor: pointer;
-  animation: pulse-quick 2s infinite ease-in-out;
 }
-@keyframes pulse-quick {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
+.chat__quick-btn--active {
+  background: #fff;
+  color: var(--c-rose, #f43f5e);
+  border: 1px solid var(--c-rose, #f43f5e);
+  box-shadow: none;
 }
 
 /* ── 消息流 ───────────────────────────────── */

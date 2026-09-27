@@ -1,27 +1,15 @@
 /**
  * ══════════════════════════════════════════════════════════════
- *  Jev 导购前台核心决策与对话状态追踪引擎 (Jev DST & Fast Decision Engine v2.0)
- *  —— 承担工业级对话推荐系统中的三大核心确定性职责：
+ *  Jev 导购前台核心决策与对话状态追踪引擎 (Jev DST & Fast Decision Engine v3.0)
+ *  —— 本地确定性职责 + 轻量快决策：
  *     1. DST 槽位看板梳理 (Slot Canvas)：1ms 整理用户输入的非结构化/选项数据为标准化槽位；
- *     2. 确定性快决策路由器 (Fast Decision Router)：以最大信息增益与宽幅发散严格控场；
- *     3. 绝不越权硬编码品类细节：让大模型在宽幅光谱下自由发散，Jev 仅控步数与预算门禁。
+ *     2. 选项归类快决策 (clusterOptionsByJev)：调用 Jev SystemOne 成对判定候选选项是否应合并；
+ *     3. 绝不越权硬编码品类细节：出题发散完全交给大模型，本地层只做整理与收敛。
  * ══════════════════════════════════════════════════════════════
  */
 
 import { classifyRelationship } from '../utils/relationship.js'
 import { callJevSystemOne } from './jevClient.js'
-
-/** 🌟 核心 DST 槽位模型 */
-export const CORE_SLOTS = [
-  'recipient',        // 关系大类：work | lover | elder | junior | friend
-  'friend_sub_type',  // 朋友细分：兄弟/哥们 | 闺蜜/姐妹 | 同窗死党 | 玩伴搭子 (仅当 friend 时)
-  'domain',           // 垂直领域：gaming | tea | coffee | photo | outdoor | desk | wellness | beauty
-  'modality',         // 心意载体形态：内容/体验本体 | 实体文化周边 | 功能装备外设 | 社交互动
-  'focus_detail',     // 题材或具体偏好细节
-  'core_need',        // 核心诉求/痛点：减负轻量、久坐舒缓、仪式感、高频实用
-  'style_tone',       // 审美调性：极简机能、自然山系、东方人文、小众质感
-  'budget',           // 预算区间：100-300、300-600、600-1200、1200+
-]
 
 /** 垂直领域轻量识别词典 (轻量识别分类，绝不硬编码狭窄选项) */
 export const DOMAIN_KNOWLEDGE = {
@@ -70,55 +58,6 @@ export const DOMAIN_KNOWLEDGE = {
     name: '生活美学与时尚',
     keywords: ['美妆', '香水', '穿搭', '饰品', '首饰', '护肤', '包包'],
   },
-}
-
-/** 🌟 核心爱好领域的选礼关键决策分歧与送礼人可观察线索 (Giver-Observable Decision Forks) */
-export const DOMAIN_DECISION_FORKS = {
-  coffee: {
-    name: '咖啡生活',
-    forks: '1. 装备状态（已有全套意式机 vs 想尝试手冲手作 vs 便捷即饮/精品豆）；2. 场景（工位办公随行 vs 居家慢享）；3. 消耗升级（高品质产区单一豆礼盒）。',
-    giverObservableHints: '问送礼人日常肉眼可见的事实：“TA平时喝拿铁多，还是黑咖啡多？”“家里已经有咖啡机了吗？”严禁问受礼人才懂的水洗日晒处理法或烘焙风味曲线。',
-  },
-  photo: {
-    name: '摄影记录与影像',
-    forks: '1. 设备形态（随身便携挂机/复古卡片 vs 现有微单升级定焦镜头/大件）；2. 实用配件（快拆摄影背包/防潮收纳/氛围滤镜/轻便碳纤维脚架）；3. 主力题材（人像/扫街/风光）。',
-    giverObservableHints: '问日常可见行为：“出门拍照常带大单反微单，还是以轻便卡片机/手机为主？”“常拍人像还是风景扫街？”严禁问受礼人才懂的MTF曲线或焦段覆盖缺口。',
-  },
-  gaming: {
-    name: '电子游戏与数码',
-    forks: '1. 主力平台（PC电竞 vs Switch掌机便携 vs PS5客厅主机）；2. 内容本体（Steam心愿单大作/实体卡带）vs 操控外设（无线手柄/机械键盘/头戴电竞耳机）。',
-    giverObservableHints: '问日常场景：“平时常坐在电脑前玩，还是在电视前或随身玩掌机？”“是喜欢沉浸单机剧情还是和朋友联机开黑？”',
-  },
-  tea: {
-    name: '茶道品茗',
-    forks: '1. 品饮场景（办公室快客随手泡/便携焖茶杯 vs 居家工夫茶台）；2. 心意载体（名山原叶茶礼盒 vs 考究紫砂建盏茶器）。',
-    giverObservableHints: '问日常场景：“TA平时在工位喝茶多，还是家里有专门茶台？”“常喝普洱老白茶还是绿茶花茶？”',
-  },
-  outdoor: {
-    name: '户外运动探索',
-    forks: '1. 运动形态（日常城市夜跑健身 vs 周末轻户外徒步露营）；2. 核心诉求（轻量减负防风防水 vs 专业补给工具与安全配件）。',
-    giverObservableHints: '问日常观察：“TA通常是短时间跑步健身，还是会专门去山野徒步？”',
-  },
-  desk: {
-    name: '办公与桌面美学',
-    forks: '1. 核心诉求（工位久坐减负护颈护腰 vs 桌面精致收纳与美学氛围）；2. 常用工具（质感文具/机械键盘/桌面温热杯垫）。',
-    giverObservableHints: '问日常观察：“TA在工位时间长吗？桌面是极简高效还是偏好有生活情调？”',
-  },
-  wellness: {
-    name: '居家治愈与康养',
-    forks: '1. 舒缓场景（颈椎/眼部/肩腰放松 vs 深度助眠香氛与睡眠调理）；2. 形态（便携按摩仪 vs 舒缓草本与温热好物）。',
-    giverObservableHints: '问日常观察：“TA平时常抱怨颈椎腰酸，还是睡眠浅容易疲劳？”',
-  },
-}
-
-export function getDomainDecisionForks(domain) {
-  if (!domain) return null
-  for (const [key, item] of Object.entries(DOMAIN_DECISION_FORKS)) {
-    if (domain.includes(item.name) || item.name.includes(domain) || domain.toLowerCase().includes(key)) {
-      return item
-    }
-  }
-  return null
 }
 
 /** 判定用户答案是否属于纯未知/跳过（未包含任何有效事实或转折） */
@@ -340,77 +279,66 @@ export function buildDialogStateCanvas(answers = {}) {
 }
 
 /**
- * 🌟 2. Jev 宏观脉络参考器 (Macro Guidance Provider)
- * 【核心重构】：围绕真实选礼决策，引导自然收敛，绝不硬性门禁剥夺模型自由。
+ * 🌟 2. 选项归类快决策：成对判定候选是否同一类该合并（Jev noul，一次调用问完所有对）
+ * 第一阶段大模型高温多想保覆盖，此处只去重收敛保层级。阈值 0.65：实测真重复 ≥0.85、跨类 ≤0.26，
+ * 间隔大、判得稳；合并用并查集，每类保留原顺序首个代表（即买手自己的优先级顺序）。
  */
-export function routeNextDecision(answers = {}, stepIndex = 1) {
-  const canvas = buildDialogStateCanvas(answers)
+const OPTION_CUSTOM_LABEL_RE = /自定义|其他|自己填|我来说/
 
-  // 看板只整理上下文；结束由模型理解当前对话，或用户点击看方案决定。
-  return { isReady: false, canvas, suggestedHint: '' }
-}
+export async function clusterOptionsByJev(candidates, contextText = '') {
+  const list = (Array.isArray(candidates) ? candidates : []).filter((o) => o && typeof o === 'object')
+  if (list.length < 2) return list
+  const capped = list.slice(0, 12)
+  const labels = capped.map((o) => String(o.label ?? '').trim())
 
+  const state = `${String(contextText || '').slice(0, 3000)}\n\nAI 买手想出以下候选选项（编号从1开始）。请判断某两个候选是否指向同一类东西、应当合并：\n` +
+    labels.map((label, i) => `候选${i + 1}: ${label}`).join('\n')
 
-/**
- * 🌟 3. 真实 Jev System 1 决策推理服务 (TypeSafe AI jev-latest)
- * 毫秒级意图识别、门禁检查与快速决策
- */
-export async function evaluateJevSystemOne(answers = {}, historyMessages = [], stepIndex = 1) {
-  const canvas = buildDialogStateCanvas(answers)
-  const recentAnswerEntries = Object.entries(answers).filter(([k]) => k !== 'recipient')
-  const lastEntry = recentAnswerEntries[recentAnswerEntries.length - 1]
-  const lastInputText = lastEntry ? String(lastEntry[1]) : ''
-
-  // 最近对话上下文简述
-  const recentDialog = (historyMessages || [])
-    .slice(-4)
-    .map((m) => `${m.role === 'user' ? '用户' : '买手'}: ${m.text}`)
-    .join(' | ')
-
-  const stateSummary = `受礼人: ${canvas.recipient || '未定'} (${canvas.rel_category})
-当前记录领域: ${canvas.domain || '待定'}
-预算状态: ${canvas.budget || '未定'}
-最近对话: ${recentDialog || '刚开始'}
-用户最新原话: ${lastInputText || '开始策划'}`
-
-  try {
-    const res = await callJevSystemOne({
-      state: stateSummary,
-      questions: {
-        user_intent: {
-          type: 'choice',
-          instructions: '用户最新原话的核心诉求或意图是什么？',
-          criteria: {
-            need_overview: '用户表示不了解、不知道、都不懂，要求都介绍一下或给出概览对比',
-            specific_selection: '用户选定或表述了某个明确的细分方向或具体偏好',
-            asking_budget: '用户在探讨价格或预算区间',
-          },
-        },
-        is_ready: {
-          type: 'noul',
-          instructions: '当前收集到的受礼人偏好与预算是否已经充分完整，可以直接生成最终推荐方案？',
-        },
-      },
-    })
-
-    const userIntent = res.answers?.user_intent?.choice || 'specific_selection'
-    const isReadyProb = res.answers?.is_ready?.noul ?? 0
-    const isReadyVerdict = isReadyProb > 0.65
-
-    return {
-      userIntent,
-      isReady: isReadyVerdict,
-      confidence: res.answers?.user_intent?.confidence || 1.0,
-      model: res.model || 'jev-latest',
-    }
-  } catch (err) {
-    console.warn('[Jev System 1 Fast Fallback]:', err.message)
-    const isNeedOverview = /不了解|都介绍|不清楚|不知道|怎么挑|有啥区别|不懂|随便/.test(lastInputText)
-    return {
-      userIntent: isNeedOverview ? 'need_overview' : 'specific_selection',
-      isReady: false,
-      confidence: 0.8,
-      model: 'jev-local-fallback',
+  const questions = {}
+  for (let a = 0; a < capped.length; a++) {
+    for (let b = a + 1; b < capped.length; b++) {
+      questions[`pair_${a}_${b}`] = {
+        type: 'noul',
+        instructions: `候选${a + 1}「${labels[a]}」与候选${b + 1}「${labels[b]}」是否指向同一类东西、应当合并为一个选项？`,
+      }
     }
   }
+
+  const res = await callJevSystemOne({ state, questions, timeout: 12000 })
+  const answers = (res && res.answers) || {}
+
+  const parent = capped.map((_, i) => i)
+  const find = (x) => (parent[x] === x ? x : (parent[x] = find(parent[x])))
+  const MERGE_THRESHOLD = 0.65
+  for (let a = 0; a < capped.length; a++) {
+    if (OPTION_CUSTOM_LABEL_RE.test(labels[a])) continue
+    for (let b = a + 1; b < capped.length; b++) {
+      if (OPTION_CUSTOM_LABEL_RE.test(labels[b])) continue
+      const v = answers[`pair_${a}_${b}`]?.noul
+      if (typeof v === 'number' && v >= MERGE_THRESHOLD) parent[find(a)] = find(b)
+    }
+  }
+
+  const seen = new Set()
+  const reps = []
+  for (let i = 0; i < capped.length; i++) {
+    const root = find(i)
+    if (seen.has(root)) continue
+    seen.add(root)
+    reps.push(capped[i])
+  }
+  return reps
+}
+
+/** 选项封顶：最多 max 个，但"其他/自定义"兜底项永不被挤掉 */
+export function capOptionsWithCustomGuard(options, max = 6) {
+  const list = Array.isArray(options) ? options : []
+  if (list.length <= max) return list
+  const kept = []
+  for (const opt of list) {
+    const label = typeof opt?.label === 'string' ? opt.label : ''
+    if (kept.length >= max && !OPTION_CUSTOM_LABEL_RE.test(label)) continue
+    kept.push(opt)
+  }
+  return kept
 }

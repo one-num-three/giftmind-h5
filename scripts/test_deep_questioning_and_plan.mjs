@@ -2,7 +2,7 @@
  * 5 轮深度出题与防死循环全生命周期自动化评估器
  */
 import { fetchNextDynamicQuestion, INITIAL_STEP } from '../src/api/aiQuestionEngine.js'
-import { generateAiPlan, getLiveReaction } from '../src/api/mimoService.js'
+import { generateAiPlan, getLiveReaction } from '../src/api/aiService.js'
 import { classifyRelationship } from '../src/utils/relationship.js'
 import { retrieveCandidates } from '../src/api/catalogService.js'
 

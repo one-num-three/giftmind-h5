@@ -1,7 +1,7 @@
 /**
  * ══════════════════════════════════════════════════════════════
- *  AI 核心服务 (Xiaomi MiMo & DeepSeek 双引擎支持)
- *  当前动态对话通过 callMiMo 请求后端；联网选礼走 realAdapter。
+ *  AI 核心服务 (DeepSeek 主引擎，经后端网关转发)
+ *  当前动态对话通过 callChatModel 请求后端；联网选礼走 realAdapter。
  *  本文件其余旧导出供兼容调用，不参与当前动态提问与选礼路径。
  * ══════════════════════════════════════════════════════════════
  */
@@ -15,7 +15,7 @@ let fallbackCycle = 0
 /**
  * 基础请求封装（服务端安全代理优先，消除前端凭据泄露风险）
  */
-export async function callMiMo(messages, { temperature = 0.7, top_p, jsonMode = false, timeout = 90000 } = {}) {
+export async function callChatModel(messages, { temperature = 0.7, top_p, jsonMode = false, timeout = 90000 } = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
 
@@ -269,7 +269,7 @@ ${dialogHistory || '- 暂无对话文本'}
 请提炼输出高质量的 4 块确认卡片 JSON：`
 
   try {
-    const raw = await callMiMo(
+    const raw = await callChatModel(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -403,7 +403,7 @@ ${letterRule}
 【必须满足/核心约束】：${constraints}`
 
   try {
-    const raw = await callMiMo(
+    const raw = await callChatModel(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
@@ -565,7 +565,7 @@ export async function generateAiReplacementGift(plan, { targetId, reason = '' } 
 }`
 
   try {
-    const raw = await callMiMo(
+    const raw = await callChatModel(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: `受礼人：${recipient}，预算：${budget}，用户反馈替换诉求：${reason || '想看点不一样的真实商品'}` },
@@ -660,7 +660,7 @@ ${audienceGuidance}
 选定风格：${styleKey}`
 
   try {
-    const raw = await callMiMo(
+    const raw = await callChatModel(
       [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },

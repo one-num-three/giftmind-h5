@@ -12,7 +12,7 @@
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
-import { fetchNextDynamicQuestion, INITIAL_STEP } from '@/api/aiQuestionEngine'
+import { fetchNextDynamicQuestion, INITIAL_STEP, explainOptionsForStep, EXPLAIN_OPTION_VALUE } from '@/api/aiQuestionEngine'
 
 const DONE_TAG = '__done__'
 const FINISH_TEXT = '先一起核对刚才聊到的细节；确认后，我会根据这些线索上网找合适的礼物。'
@@ -27,6 +27,14 @@ export function useChatFlow() {
   function toggleSpeedMode() {
     speedMode.value = speedMode.value === 'normal' ? 'fast' : 'normal'
     localStorage.setItem('gm_chat_speed', speedMode.value)
+  }
+
+  /** 提问节奏模式：'normal'（细致深挖） | 'fast'（用户点了"快点问"，只问关键项、尽快收敛） */
+  const paceMode = ref(localStorage.getItem('gm_chat_pace') || 'normal')
+
+  function togglePaceMode() {
+    paceMode.value = paceMode.value === 'normal' ? 'fast' : 'normal'
+    localStorage.setItem('gm_chat_pace', paceMode.value)
   }
 
   /** AI 是否正在输出中 */
@@ -152,7 +160,10 @@ export function useChatFlow() {
       const aiResult = await fetchNextDynamicQuestion(
         session.answers,
         session.messages,
-        session.stepIndex
+        session.stepIndex,
+        [],
+        session.answerSteps,
+        paceMode.value
       )
       if (!isRunValid(runId)) return
 
@@ -220,6 +231,30 @@ export function useChatFlow() {
     return Boolean(step) && !isDisposed && step.id === session.currentStep?.id
   }
 
+  /**
+   * 💡 "讲讲区别"：不提交答案、不推进题目。
+   * 用户气泡以 muted 记入对话历史（后续出题模型看到"问过区别"不会重复讲），
+   * 讲解文本打字机输出后原题选项原样回来，用户接着选。
+   */
+  async function explainChoice(step) {
+    const runId = startNewRun()
+    session.pushMessage({ role: 'user', text: '讲讲区别', stepId: step.id, muted: true })
+    typing.value = true
+    try {
+      const text = await explainOptionsForStep(step, session.answers)
+      if (!isRunValid(runId)) return
+      const content = text || '这几个选项的区别说来话长，你可以先凭感觉选一个，或者直接输入你更具体的想法，我按你的来。'
+      await streamSingleMessage(content, step.id, runId)
+    } catch (err) {
+      console.error('Explain options error:', err)
+      if (isRunValid(runId)) {
+        await streamSingleMessage('刚才网络有点波动，没讲成。你可以直接选一个，或者点"其他"输入你的想法。', step.id, runId)
+      }
+    } finally {
+      if (isRunValid(runId)) typing.value = false
+    }
+  }
+
   function submit(step, value) {
     if (!isCurrent(step)) return
     if (step.key === 'retry_action') {
@@ -229,6 +264,10 @@ export function useChatFlow() {
       }
       // 重新生成追问：清空重试题，重新发起深度思考
       advance(step, '')
+      return
+    }
+    if (value === EXPLAIN_OPTION_VALUE) {
+      explainChoice(step)
       return
     }
     const displayText = displayOf(step, value)
@@ -310,5 +349,5 @@ export function useChatFlow() {
     return t
   }
 
-  return { typing, speedMode, toggleSpeedMode, submit, skipStep, goBack, quickFinish, defer }
+  return { typing, speedMode, toggleSpeedMode, paceMode, togglePaceMode, submit, skipStep, goBack, quickFinish, defer }
 }

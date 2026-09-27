@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-vi.mock('@/api/mimoService.js', () => ({ callMiMo: vi.fn() }))
-import { callMiMo } from '@/api/mimoService.js'
+vi.mock('@/api/aiService.js', () => ({ callChatModel: vi.fn() }))
+import { callChatModel } from '@/api/aiService.js'
 import { fetchNextDynamicQuestion } from '@/api/aiQuestionEngine.js'
 import { useSessionStore } from '@/stores/session'
 import { composeConsultationBlocks } from '@/utils/summaryCompose'
@@ -10,7 +10,7 @@ import { composeConsultationBlocks } from '@/utils/summaryCompose'
 beforeEach(() => {
   localStorage.clear()
   setActivePinia(createPinia())
-  callMiMo.mockReset()
+  callChatModel.mockReset()
 })
 
 const question = (key, text) => ({
@@ -26,15 +26,15 @@ describe('三轮场景回归：程序不代替模型决定深度', () => {
     expect(store.stepIndex).toBe(1)
     expect(store.isFinished).toBe(false)
     for (let round = 1; round <= 10; round++) {
-      callMiMo.mockResolvedValueOnce(JSON.stringify(question(`detail_${round}`, `进一步了解第${round}个实际使用细节？`)))
+      callChatModel.mockResolvedValueOnce(JSON.stringify(question(`detail_${round}`, `进一步了解第${round}个实际使用细节？`)))
       const step = await fetchNextDynamicQuestion(store.answers, store.messages, store.stepIndex)
       expect(step.isReady).not.toBe(true)
       store.setDynamicStep(step)
       store.answer(step, `用户细节${round}`)
       expect(store.isFinished).toBe(false)
     }
-    expect(callMiMo).toHaveBeenCalledTimes(10)
-    callMiMo.mockResolvedValueOnce('{"isReady":true}')
+    expect(callChatModel).toHaveBeenCalledTimes(10)
+    callChatModel.mockResolvedValueOnce('{"isReady":true}')
     expect((await fetchNextDynamicQuestion(store.answers, store.messages, store.stepIndex)).isReady).toBe(true)
   })
 
@@ -55,9 +55,9 @@ describe('三轮场景回归：程序不代替模型决定深度', () => {
     expect(store.isFinished).toBe(false)
     expect(store.answers.camera_gear).toBe('更正：只有手机')
     expect(store.answers.budget).toBe('1500元')
-    callMiMo.mockResolvedValueOnce(JSON.stringify(question('phone_scene', '手机拍照最想改善什么？')))
+    callChatModel.mockResolvedValueOnce(JSON.stringify(question('phone_scene', '手机拍照最想改善什么？')))
     await fetchNextDynamicQuestion(store.answers, store.messages, store.stepIndex)
-    const context = callMiMo.mock.calls[0][0][1].content
+    const context = callChatModel.mock.calls[0][0][1].content
     expect(context).toContain('更正：只有手机')
     expect(context).toContain('1500元')
     expect(context).not.toContain('不清楚品牌，但有相机')
@@ -70,7 +70,7 @@ describe('三轮场景回归：程序不代替模型决定深度', () => {
   })
 
   it('未知或跳过的回答也不会被同名追问覆盖', async () => {
-    callMiMo.mockResolvedValueOnce(JSON.stringify(question('gear', '最近观察到哪些使用习惯？')))
+    callChatModel.mockResolvedValueOnce(JSON.stringify(question('gear', '最近观察到哪些使用习惯？')))
     const answers = { recipient: '朋友', gear: '', gear_3: '不清楚' }
     const step = await fetchNextDynamicQuestion(answers, [], 3)
     expect(step.key).toBe('gear_4')
@@ -83,7 +83,7 @@ describe('三轮场景回归：程序不代替模型决定深度', () => {
     store.start()
     const step = { id: 'dynamic_scene', key: 'scene', messages: ['平时怎么用？'], type: 'single' }
     store.answer(step, '通勤')
-    callMiMo.mockRejectedValueOnce(new Error('网络中断'))
+    callChatModel.mockRejectedValueOnce(new Error('网络中断'))
     await expect(fetchNextDynamicQuestion(store.answers, store.messages, store.stepIndex)).rejects.toThrow()
     expect(store.isFinished).toBe(false)
     expect(store.answers.scene).toBe('通勤')

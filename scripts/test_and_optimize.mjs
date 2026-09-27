@@ -3,7 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { classifyRelationship } from '../src/utils/relationship.js'
 import { retrieveCandidates, formatCandidatesForPrompt } from '../src/api/catalogService.js'
-import { generateAiPlan, getLiveReaction, generateCustomStyleLetter } from '../src/api/mimoService.js'
+import { generateAiPlan, getLiveReaction, generateCustomStyleLetter } from '../src/api/aiService.js'
 import { fetchNextDynamicQuestion, INITIAL_STEP } from '../src/api/aiQuestionEngine.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
