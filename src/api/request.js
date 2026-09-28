@@ -151,5 +151,6 @@ export const http = {
   get: (p, opts) => request(p, { ...opts, method: 'GET' }),
   post: (p, body, opts) => request(p, { ...opts, method: 'POST', body }),
   put: (p, body, opts) => request(p, { ...opts, method: 'PUT', body }),
+  patch: (p, body, opts) => request(p, { ...opts, method: 'PATCH', body }),
   del: (p, opts) => request(p, { ...opts, method: 'DELETE' }),
 }

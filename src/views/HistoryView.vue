@@ -66,7 +66,7 @@ function doClear() {
 }
 
 onMounted(() => {
-  history.reload()
+  history.ensureLoaded()
 })
 </script>
 
@@ -154,7 +154,7 @@ onMounted(() => {
     <GSheet v-model="menuOpen" :title="confirming ? '清空全部方案？' : '管理'">
       <template v-if="confirming">
         <p class="menu__warn">
-          这台设备上的 {{ history.count }} 份方案会一起消失，包括礼物推荐、写好的信和仪式流程。
+          {{ history.count }} 份方案会一起消失，包括礼物推荐、写好的信和仪式流程。
         </p>
       </template>
       <template v-else>
@@ -168,7 +168,7 @@ onMounted(() => {
           <span class="menu__label">清空全部方案</span>
           <span class="menu__hint">{{ isEmpty ? '暂无方案' : `${history.count} 份` }}</span>
         </button>
-        <p class="menu__note">方案只存在这台设备上，清空之后没办法恢复。</p>
+        <p class="menu__note">方案存在本地策划服务里，清空之后没办法恢复。</p>
       </template>
 
       <template #footer>

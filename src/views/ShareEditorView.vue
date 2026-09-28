@@ -59,8 +59,9 @@ function text(v) {
   return typeof v === 'string' ? v.trim() : ''
 }
 
-onMounted(() => {
-  history.reload()
+onMounted(async () => {
+  // 等方案库加载完再取（后端优先），直接刷新分享编辑页也能拿到
+  await history.ensureLoaded()
   const found = history.get(String(route.params.id || ''))
   if (!found) {
     ui.error('没有找到这份方案')

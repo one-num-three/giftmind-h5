@@ -6,6 +6,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
+import { projectsApi } from '@/api/projects'
+import { selectOngoingProjects, ongoingTitle, ongoingMetaText } from '@/utils/ongoing'
 import HeroScene from '@/components/layout/HeroScene.vue'
 
 const router = useRouter()
@@ -14,7 +16,10 @@ const session = useSessionStore()
 const bodyRef = ref(null)
 const heroRef = ref(null)
 const hasDraft = ref(false)
+/** 后端还在进行中的挑礼项目（未存方案、答过至少 1 题） */
+const ongoing = ref([])
 const showBar = ref(false)
+const modeOpen = ref(false)
 
 /* ── 内容数据 ─────────────────────────────── */
 const pains = [
@@ -91,8 +96,19 @@ const deliverables = [
 ]
 
 /* ── 交互 ─────────────────────────────────── */
+/** 主 CTA：打开模式选择（新建项目流第一步） */
 function startPlanning() {
-  session.start(true)
+  modeOpen.value = true
+}
+
+function useExistingPlans() {
+  router.push('/history')
+}
+
+/** 模式选定：建一个挑礼项目再进问答（项目创建是异步的，不挡进场） */
+function startProject(mode) {
+  modeOpen.value = false
+  session.startNewProject(mode)
   router.push('/chat')
 }
 
@@ -101,9 +117,14 @@ function continueDraft() {
   router.push('/chat')
 }
 
+/** 继续后端某个进行中的挑礼项目（现场从后端恢复，AI 接着问） */
+function resumeProject(projectId) {
+  if (!projectId) return
+  router.push(`/chat?project=${projectId}`)
+}
+
 function restartFresh() {
-  session.reset()
-  session.start(true)
+  session.startNewProject('qa')
   hasDraft.value = false
   router.push('/chat')
 }
@@ -128,8 +149,16 @@ function onScroll() {
   rafId = requestAnimationFrame(update)
 }
 
-onMounted(() => {
+onMounted(async () => {
   hasDraft.value = session.hasDraft()
+
+  // 拉后端项目列表：把"问到一半"的挑礼提到首屏，没存方案的才是进行中
+  try {
+    const list = await projectsApi.list()
+    ongoing.value = selectOngoingProjects(list)
+  } catch {
+    ongoing.value = []
+  }
 
   scrollEl = bodyRef.value
   heroEl = heroRef.value
@@ -190,8 +219,29 @@ onUnmounted(() => {
             送什么、附上什么话、怎么送出去。
           </p>
 
+          <!-- 进行中的挑礼（后端项目，未存方案）：多取最近 3 个 -->
           <GCard
-            v-if="hasDraft"
+            v-if="ongoing.length"
+            class="draft anim-up d-3"
+            padding="md"
+            radius="md"
+            bordered
+            :elevated="false"
+          >
+            <p class="draft__title">聊到一半的这些，接着聊？</p>
+            <div class="ongoing">
+              <div v-for="p in ongoing" :key="p.id" class="ongoing__item tap" @click="resumeProject(p.id)">
+                <div class="ongoing__text">
+                  <p class="ongoing__name">{{ ongoingTitle(p) }}</p>
+                  <p class="ongoing__meta">{{ ongoingMetaText(p) }}</p>
+                </div>
+                <GButton variant="soft" size="sm" @click.stop="resumeProject(p.id)">继续</GButton>
+              </div>
+            </div>
+          </GCard>
+
+          <GCard
+            v-else-if="hasDraft"
             class="draft anim-up d-3"
             padding="md"
             radius="md"
@@ -213,9 +263,10 @@ onUnmounted(() => {
 
           <div class="hero__cta anim-up d-4">
             <GButton variant="primary" size="lg" @click="startPlanning">
-              开始策划我的礼物
+              新建选礼项目
               <GIcon name="arrowRight" :size="18" />
             </GButton>
+            <GButton variant="outline" size="lg" @click="useExistingPlans">用已有方案</GButton>
           </div>
 
           <p class="hero__proof anim-up d-5">
@@ -351,6 +402,29 @@ onUnmounted(() => {
         </div>
       </div>
     </Transition>
+
+    <!-- ══ 模式选择：新建项目流第二步 ══ -->
+    <GSheet v-model="modeOpen" title="新建选礼项目">
+      <p class="modes__hint">选一种方式开始，聊到一半随时退出，进度都会留着。</p>
+      <div class="modes">
+        <button class="mode tap" type="button" @click="startProject('qa')">
+          <span class="mode__emoji">📝</span>
+          <span class="mode__text">
+            <span class="mode__title">问答问卷</span>
+            <span class="mode__desc">AI 一道题一道题问你，答完直接出方案</span>
+          </span>
+          <GIcon name="chevron" :size="16" />
+        </button>
+        <button class="mode tap" type="button" @click="startProject('agent')">
+          <span class="mode__emoji">🌙</span>
+          <span class="mode__text">
+            <span class="mode__title">Agent 闲聊</span>
+            <span class="mode__desc">不用答题，像朋友一样聊出 TA 的画像，聊够了点「生成方案」</span>
+          </span>
+          <GIcon name="chevron" :size="16" />
+        </button>
+      </div>
+    </GSheet>
   </div>
 </template>
 
@@ -427,6 +501,9 @@ onUnmounted(() => {
 
 .hero__cta {
   margin-top: var(--s-7);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
 }
 
 .hero__proof {
@@ -470,6 +547,42 @@ onUnmounted(() => {
 /* 草稿续接 */
 .draft {
   margin-top: var(--s-6);
+}
+
+/* 进行中的挑礼列表 */
+.ongoing {
+  margin-top: var(--s-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.ongoing__item {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-sm);
+  background: var(--c-paper-2, #fafafa);
+}
+.ongoing__item:active {
+  background: var(--c-rose-soft, #fff1f2);
+}
+.ongoing__text {
+  flex: 1;
+  min-width: 0;
+}
+.ongoing__name {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ongoing__meta {
+  margin-top: 2px;
+  font-size: var(--fs-caption);
+  color: var(--c-ink-3);
 }
 .draft__top {
   display: flex;
@@ -899,5 +1012,67 @@ onUnmounted(() => {
   .hero__arrow {
     animation: none;
   }
+}
+
+/* ══ 模式选择 ══════════════════════════════ */
+.modes__hint {
+  padding: 0 2px var(--s-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-normal);
+  color: var(--c-ink-3);
+}
+.modes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.mode {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  width: 100%;
+  min-height: 72px;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  box-shadow: inset 0 0 0 1px var(--c-line);
+  text-align: left;
+}
+.mode:active {
+  box-shadow: inset 0 0 0 1px var(--c-rose-soft);
+}
+.mode--off {
+  opacity: 0.55;
+}
+.mode__emoji {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.mode__text {
+  flex: 1;
+  min-width: 0;
+}
+.mode__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-body);
+  font-weight: 500;
+  color: var(--c-ink);
+}
+.mode__badge {
+  padding: 2px 7px;
+  border-radius: var(--r-pill);
+  background: var(--c-paper-2);
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--c-ink-3);
+}
+.mode__desc {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-snug);
+  color: var(--c-ink-3);
 }
 </style>

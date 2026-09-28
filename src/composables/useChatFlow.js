@@ -10,15 +10,18 @@
  * ══════════════════════════════════════════════════════════════
  */
 import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session'
+import { projectsApi } from '@/api/projects'
 import { fetchNextDynamicQuestion, INITIAL_STEP, explainOptionsForStep, EXPLAIN_OPTION_VALUE } from '@/api/aiQuestionEngine'
+import { agentChat, agentNextQuestion, AGENT_GREETING } from '@/api/agentEngine'
 
 const DONE_TAG = '__done__'
 const FINISH_TEXT = '先一起核对刚才聊到的细节；确认后，我会根据这些线索上网找合适的礼物。'
 
 export function useChatFlow() {
   const session = useSessionStore()
+  const route = useRoute()
   const router = useRouter()
 
   /** 打字机速率模式：'normal'（真人自然节奏 35ms） | 'fast'（极速 18ms） */
@@ -39,6 +42,12 @@ export function useChatFlow() {
 
   /** AI 是否正在输出中 */
   const typing = ref(false)
+  /** Agent 闲聊模式：当前可点的方向建议（模型随缘给，发送后清空） */
+  const agentChips = ref([])
+  /** 点过「生成方案」后进入出题补全阶段：期间用户每答一句都自动出下一道题，直到信息收齐 */
+  const planPending = ref(false)
+  /** 上一轮题目要补进的画像槽位（用户回答后回写 answers；内存态，刷新丢失不碍事——模型读对话历史能感知答案） */
+  let pendingSlotKey = ''
   let activeRunId = 0
   let isDisposed = false
 
@@ -127,6 +136,163 @@ export function useChatFlow() {
       if (found?.label) return found.label
     }
     return undefined
+  }
+
+  /* ── Agent 闲聊模式（二期：自由聊攒画像，用户点按钮才出方案） ── */
+
+  /** 进场：无历史播固定开场白（会落库）；有历史纯展示——
+   *  但若最后停在用户消息（或半个没打完的 AI 空气泡）上，说明上一轮 AI 在思考/打字途中被退出动作丢掉了，补接一轮 */
+  async function agentBoot() {
+    const runId = startNewRun()
+    if (!session.messages.length) {
+      typing.value = true
+      await streamSingleMessage(AGENT_GREETING, '__agent__', runId)
+      if (isRunValid(runId)) typing.value = false
+      return
+    }
+    const lastMsg = session.messages[session.messages.length - 1]
+    const dangling =
+      (lastMsg.role === 'user' && !lastMsg.muted) ||
+      (lastMsg.role === 'ai' && !String(lastMsg.text || '').trim())
+    if (!dangling) return
+    dropTrailingEmptyAiBubbles()
+    typing.value = true
+    await agentRespond(runId)
+    if (isRunValid(runId)) typing.value = false
+  }
+
+  /** 丢掉末尾没打完的 AI 空气泡（它们从未落库，留着只会挡住恢复判断） */
+  function dropTrailingEmptyAiBubbles() {
+    while (session.messages.length) {
+      const last = session.messages[session.messages.length - 1]
+      if (last.role !== 'ai' || String(last.text || '').trim()) break
+      session.messages.pop()
+    }
+  }
+
+  /** 闲聊一轮的 AI 半边：接话 → 提炼槽位 → 打字播出 → 随缘 chips。
+   *  agentSend 正常调用；用户「AI 思考/打字途中退出再回来」时由 agentBoot 补调，把没接住的那半轮接上 */
+  async function agentRespond(runId) {
+    try {
+      const result = await agentChat({ messages: session.messages, answers: session.answers })
+      if (!isRunValid(runId)) return false
+      session.mergeAgentSlots(result?.slots)
+      await streamSingleMessage(result?.reply, '__agent__', runId)
+      if (isRunValid(runId)) agentChips.value = result?.chips || []
+      return true
+    } catch (err) {
+      console.error('Agent chat error:', err)
+      if (isRunValid(runId)) {
+        await streamSingleMessage('刚才网络抖了一下，你接着说～', '__agent__', runId)
+      }
+      return false
+    }
+  }
+
+  /**
+   * 出题补全的核心一步：让 LLM 自检还缺什么——
+   * 收齐（且预算在位）→ 收口或直通生成；没齐 → 播题 + 给可点选项。
+   * directOnDone=true 用于点按钮的当轮：信息本来就齐就直接进 /generating，省一次重复点击。
+   */
+  async function askNextQuestion(runId, directOnDone = false) {
+    const next = await agentNextQuestion({ answers: session.answers, messages: session.messages })
+    if (!isRunValid(runId)) return false
+    if (!next) {
+      // 解析/调用失败：按预算缺口播兜底追问，不让对话断线
+      const missingBudget = !session.answers?.budget
+      pendingSlotKey = missingBudget ? 'budget' : ''
+      await streamSingleMessage(
+        missingBudget ? '预算大概定在多少呀？定了我就能开工。' : 'TA 还有什么没聊到的偏好吗？',
+        '__agent__',
+        runId
+      )
+      return true
+    }
+    if (next.done) {
+      if (session.answers?.budget) {
+        planPending.value = false
+        if (directOnDone) {
+          await streamSingleMessage('好嘞，信息够了～我这就给你做方案，稍等几秒。', '__agent__', runId)
+          if (!isRunValid(runId)) return false
+          typing.value = false
+          router.push('/generating')
+          return true
+        }
+        // 追询途中变齐：明确收口，绝不走闲聊接话（闲聊不带问号的规矩会抹掉收敛信号，两次实测卡死在这）
+        await streamSingleMessage(
+          '好嘞，信息够了～想生成的时候点右上角的 🎁 就行，想再补充什么也可以继续聊。',
+          '__agent__',
+          runId
+        )
+      } else {
+        // 模型说齐了但预算缺失——硬下限不许放行（预算不可缺席）
+        pendingSlotKey = 'budget'
+        await streamSingleMessage('最后确认一下：这次预算大概多少呀？定了我就能开工。', '__agent__', runId)
+      }
+      return true
+    }
+    pendingSlotKey = next.slotKey
+    await streamSingleMessage(next.question, '__agent__', runId)
+    if (isRunValid(runId)) agentChips.value = next.options
+    return true
+  }
+
+  async function agentSend(text) {
+    const clean = typeof text === 'string' ? text.trim() : ''
+    if (!clean || isDisposed) return false
+    const runId = startNewRun()
+    session.pushMessage({ role: 'user', text: clean, stepId: '__agent__' })
+    agentChips.value = []
+    typing.value = true
+    try {
+      // 🌟 出题补全阶段：先把这轮回答写进画像槽位（上一轮题目预告过 slot_key），再出下一道题
+      if (planPending.value) {
+        if (pendingSlotKey) {
+          session.mergeAgentSlots({ [pendingSlotKey]: clean })
+          pendingSlotKey = ''
+        }
+        await askNextQuestion(runId)
+      } else {
+        await agentRespond(runId)
+      }
+    } catch (err) {
+      console.error('Agent send error:', err)
+      if (isRunValid(runId)) await agentRespond(runId)
+    } finally {
+      if (isRunValid(runId)) typing.value = false
+    }
+    return true
+  }
+
+  /**
+   * 用户点「生成方案」：muted 记一条用户意图 → 进入出题补全阶段。
+   * 信息本来就齐 → 预告后直接进 /generating（白嫖问答模式整条生成+保存链路）；
+   * 不齐 → 播第一道题，此后用户每答一句自动出下一道，直到收齐收口。
+   */
+  async function requestPlan() {
+    if (isDisposed || typing.value) return false
+    const runId = startNewRun()
+    typing.value = true
+    agentChips.value = []
+    session.pushMessage({ role: 'user', text: '生成方案', stepId: '__agent__', muted: true })
+    try {
+      planPending.value = true
+      await askNextQuestion(runId, true)
+    } catch (err) {
+      console.error('Plan interrogation error:', err)
+      if (isRunValid(runId)) {
+        const missingBudget = !session.answers?.budget
+        pendingSlotKey = missingBudget ? 'budget' : ''
+        await streamSingleMessage(
+          missingBudget ? '预算大概定在多少呀？定了我就能开工。' : 'TA 还有什么没聊到的偏好吗？',
+          '__agent__',
+          runId
+        )
+      }
+    } finally {
+      if (isRunValid(runId)) typing.value = false
+    }
+    return true
   }
 
   /* ── 收尾 ─────────────────────────────────────── */
@@ -297,8 +463,49 @@ export function useChatFlow() {
     return []
   }
 
+  /**
+   * ✏️ 点气泡改答案：把对话截回该题重新作答（下游问答作废重问）。
+   * 截断后推一条系统消息，让出题模型明白上下文跳变、以最新回答为准。
+   */
+  function editAnswer(message) {
+    if (isDisposed || typing.value || !message) return false
+    if (message.role !== 'user' || message.muted || message.streaming) return false
+    startNewRun()
+    typing.value = false
+    const ok = session.revisitDynamic(message.stepId)
+    if (!ok) return false
+    session.pushMessage({
+      role: 'system',
+      stepId: '__edit__',
+      text: '用户回头修改了此前某一题的回答，该题之后的问答已全部作废，请结合最新回答继续推进，不要重复已作废的内容。',
+    })
+    return true
+  }
+
   /* ── 进场 ─────────────────────────────────────── */
   async function boot() {
+    // 🌟 恢复现场：优先 ?project=（方案页/聊一半卡片的「继续」）；
+    // 没有 query 但本地绑定了项目（整页刷新/重开标签页，URL 上不带参数）时同样回捞，
+    // 否则模式会丢回 qa、把问答开场白误存进 agent 项目——这是刷新后「从头开始问答」的根因
+    const projectQuery = String(route.query.project || '')
+    const resumeId = projectQuery || session.currentProjectId
+    if (resumeId && (resumeId !== session.currentProjectId || !session.messages.length)) {
+      try {
+        const record = await projectsApi.get(resumeId)
+        session.bindProject(resumeId)
+        session.restoreFromProject(record)
+      } catch (err) {
+        // 拉不到就按全新会话走，不挡路
+        console.error('恢复项目现场失败：', err)
+      }
+    }
+
+    // 🌟 Agent 闲聊模式：无问卷、无推进，现场就是全部（开场白只在新项目播一次）
+    if (session.mode === 'agent') {
+      await agentBoot()
+      return
+    }
+
     if (session.stepIndex === 0) {
       session.start(true)
     } else if (!session.messages.length && session.hasDraft()) {
@@ -311,7 +518,18 @@ export function useChatFlow() {
       finish(runId)
       return
     }
-    if (session.stepIndex > 0 && !session.activeDynamicStep) {
+
+    // 🌟 AI 思考/打字途中退出再回来：最后一条停在用户消息（或半个 AI 空气泡）上 = AI 后半轮丢了，进场就补一嗓子
+    const lastMsg = session.messages[session.messages.length - 1]
+    const danglingUserTurn =
+      lastMsg &&
+      ((lastMsg.role === 'user' && !lastMsg.muted) ||
+        (lastMsg.role === 'ai' && !String(lastMsg.text || '').trim()))
+    if (danglingUserTurn) {
+      dropTrailingEmptyAiBubbles()
+      session.activeDynamicStep = null
+    }
+    if (session.stepIndex > 0 && (!session.activeDynamicStep || danglingUserTurn)) {
       await advance()
       return
     }
@@ -349,5 +567,5 @@ export function useChatFlow() {
     return t
   }
 
-  return { typing, speedMode, toggleSpeedMode, paceMode, togglePaceMode, submit, skipStep, goBack, quickFinish, defer }
+  return { typing, speedMode, toggleSpeedMode, paceMode, togglePaceMode, submit, skipStep, goBack, quickFinish, editAnswer, agentChips, agentSend, requestPlan, defer }
 }

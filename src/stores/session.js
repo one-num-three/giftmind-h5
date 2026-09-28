@@ -7,16 +7,27 @@ import { INITIAL_STEP } from '@/api/aiQuestionEngine'
 import { CHAT_FLOW, stageLabel } from '@/config/flow'
 import { uid } from '@/utils/helpers'
 import storage from '@/utils/storage'
+import { projectsApi } from '@/api/projects'
 import { buildDialogStateCanvas } from '@/services/jevEngine'
 import { createInitial12Traits, morphDynamicTraitsByDomain, evaluateAndFill12Traits } from '@/services/jevTraitsManager'
 
 const DRAFT_KEY = 'gm_draft_session'
+const PROJECT_KEY = 'gm_current_project'
+const PROJECT_MODE_KEY = 'gm_project_mode'
 const RECOVERY_FIELDS = new Set(['budget', 'timing'])
+const MAX_PENDING_MESSAGES = 200
+
+/** 项目绑定完成前要落库的消息先排队，bindProject 时按序补发 */
+let pendingMessages = []
 
 export const useSessionStore = defineStore('session', {
   state: () => ({
     id: '',
-    messages: [], // { id, role: 'ai'|'user'|'system', text, at, stepId, streaming }
+    currentProjectId: storage.get(PROJECT_KEY) || '',
+    /** 挑礼模式：'qa' 问答问卷 | 'agent' 自由闲聊，后端项目记录里的 mode 为准；
+     *  随项目绑定一起持久化，刷新/重开页面后仍知道自己身处哪种模式 */
+    mode: storage.get(PROJECT_MODE_KEY) || 'qa',
+    messages: [], // { id, role: 'ai'|'user'|'system', text, at, stepId, streaming, synced }
     answers: {},
     answerSteps: {},
     stepIndex: 0,
@@ -51,95 +62,6 @@ export const useSessionStore = defineStore('session', {
     traits12: (s) => s.dynamic12Traits || [],
     filledTraitsCount: (s) => (s.dynamic12Traits || []).filter((t) => t.isFilled).length,
     traitsProgress: (s) => Math.round(((s.dynamic12Traits || []).filter((t) => t.isFilled).length / 12) * 100),
-    /** 🌟 Jev 驱动的买手人情动态洞察画像徽标 */
-    insightBadges(s) {
-      const badges = []
-      const canvas = buildDialogStateCanvas(s.answers || {})
-
-      // 1. 关系徽标 (精准反映细分类型，绝不模糊)
-      if (canvas.recipient) {
-        if (canvas.friend_sub_type) {
-          const emojiMap = {
-            '铁哥们 / 兄弟': '👊',
-            '好闺蜜 / 姐妹': '✨',
-            '同窗死党': '🎓',
-            '日常搭子 / 玩伴': '🤝',
-          }
-          badges.push({
-            text: canvas.friend_sub_type,
-            icon: emojiMap[canvas.friend_sub_type] || '🤝',
-            tone: 'friend',
-          })
-        } else if (canvas.rel_category === 'work') {
-          badges.push({ text: '职场尊崇与分寸', icon: '👔', tone: 'work' })
-        } else if (canvas.rel_category === 'lover') {
-          badges.push({ text: '亲密浪漫专属', icon: '💗', tone: 'love' })
-        } else if (canvas.rel_category === 'elder') {
-          badges.push({ text: '孝敬康养体贴', icon: '🏡', tone: 'elder' })
-        } else if (canvas.rel_category === 'junior') {
-          badges.push({ text: '童趣益智探索', icon: '🎈', tone: 'kid' })
-        } else {
-          badges.push({ text: '挚友默契', icon: '🤝', tone: 'friend' })
-        }
-      }
-
-      // 2. 领域徽标 (动态展示任何爱好领域，绝不死卡 8 种)
-      if (canvas.domain) {
-        const domainMap = {
-          ai_tech: { text: 'AI与数字科技', icon: '🤖', tone: 'tech' },
-          'AI与数字科技': { text: 'AI与数字科技', icon: '🤖', tone: 'tech' },
-          model_toys: { text: '潮玩模型积木', icon: '🧩', tone: 'toys' },
-          '潮玩模型积木': { text: '潮玩模型积木', icon: '🧩', tone: 'toys' },
-          music: { text: '音乐与音频美学', icon: '🎵', tone: 'music' },
-          '音乐与音频美学': { text: '音乐与音频美学', icon: '🎵', tone: 'music' },
-          tea: { text: '办公室慢调品茗', icon: '🍵', tone: 'tea' },
-          '茶道品茗': { text: '茶道品茗', icon: '🍵', tone: 'tea' },
-          coffee: { text: '精品咖啡生活', icon: '☕', tone: 'coffee' },
-          '咖啡生活': { text: '精品咖啡生活', icon: '☕', tone: 'coffee' },
-          photo: { text: '摄影记录与影像', icon: '📷', tone: 'photo' },
-          '摄影记录与影像': { text: '摄影记录与影像', icon: '📷', tone: 'photo' },
-          outdoor: { text: '轻量户外探索', icon: '⛰️', tone: 'outdoor' },
-          '户外运动探索': { text: '轻量户外探索', icon: '⛰️', tone: 'outdoor' },
-          gaming: { text: '硬核游戏电竞', icon: '🎮', tone: 'gaming' },
-          '电子游戏与数码': { text: '电子游戏与数码', icon: '🎮', tone: 'gaming' },
-          desk: { text: '工位桌面美学', icon: '🖋️', tone: 'desk' },
-          '办公与桌面美学': { text: '工位桌面美学', icon: '🖋️', tone: 'desk' },
-          wellness: { text: '居家身心治愈', icon: '🌿', tone: 'wellness' },
-          '居家治愈与康养': { text: '居家身心治愈', icon: '🌿', tone: 'wellness' },
-          beauty: { text: '生活美学与时尚', icon: '🌸', tone: 'beauty' },
-          '生活美学与时尚': { text: '生活美学与时尚', icon: '🌸', tone: 'beauty' },
-        }
-        if (domainMap[canvas.domain]) {
-          badges.push(domainMap[canvas.domain])
-        } else {
-          badges.push({ text: canvas.domain.slice(0, 8), icon: '🎯', tone: 'domain' })
-        }
-      }
-
-      // 3. 心意形态与细节
-      if (canvas.modality) {
-        badges.push({ text: canvas.modality, icon: '🎁', tone: 'sub' })
-      } else if (canvas.sub_feature) {
-        badges.push({ text: canvas.sub_feature, icon: '🎯', tone: 'sub' })
-      }
-      if (canvas.focus_detail) {
-        badges.push({ text: canvas.focus_detail, icon: '✨', tone: 'detail' })
-      }
-
-      // 4. 诉求与风格
-      if (canvas.core_need) {
-        badges.push({ text: canvas.core_need, icon: '💡', tone: 'need' })
-      } else if (canvas.style_tone) {
-        badges.push({ text: canvas.style_tone, icon: '🎨', tone: 'style' })
-      }
-
-      // 5. 预算
-      if (canvas.budget) {
-        badges.push({ text: '预算精准锁定', icon: '🎯', tone: 'budget' })
-      }
-
-      return badges
-    },
   },
 
   actions: {
@@ -176,6 +98,135 @@ export const useSessionStore = defineStore('session', {
       this.status = 'asking'
     },
 
+    /** 🌟 项目制：把当前会话绑定到一个挑礼项目（消息/答案落库都靠它） */
+    bindProject(projectId) {
+      const pid = typeof projectId === 'string' ? projectId : ''
+      this.currentProjectId = pid
+      if (pid) storage.set(PROJECT_KEY, pid)
+      else storage.remove(PROJECT_KEY)
+      // 绑定前排队等待的消息，现在按序补发
+      if (pid && pendingMessages.length) {
+        const queued = pendingMessages
+        pendingMessages = []
+        for (const m of queued) this._postMessage(pid, m)
+      }
+    },
+
+    clearProject() {
+      this.bindProject('')
+    },
+
+    /**
+     * 开始一个全新的挑礼项目：清掉旧现场 → 立即开聊 → 异步创建后端项目并绑定。
+     * 不等待创建完成才进页面（后端不在也能聊，消息先排队，绑定后补发）。
+     */
+    async startNewProject(mode = 'qa') {
+      this.reset()
+      this.mode = mode === 'agent' ? 'agent' : 'qa'
+      storage.set(PROJECT_MODE_KEY, this.mode)
+      this.start(true)
+      try {
+        const project = await projectsApi.create({ mode })
+        if (project?.id) this.bindProject(project.id)
+      } catch {
+        /* 本地服务没启动：不阻塞聊天 */
+      }
+    },
+
+    /** 从后端项目记录恢复现场（方案页「继续完善」回到问答时用） */
+    restoreFromProject(record) {
+      if (!record || typeof record !== 'object') return false
+      pendingMessages = []
+      const list = Array.isArray(record.messages) ? record.messages : []
+      this.messages = list.map((m) => ({
+        id: m.id || uid('msg'),
+        role: m.role === 'ai' || m.role === 'system' ? m.role : 'user',
+        text: typeof m.content === 'string' ? m.content : '',
+        at: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
+        stepId: m.stepKey || '',
+        streaming: false,
+        synced: true, // 已在库里的消息不再回写
+      }))
+      this.answers = record.answers && typeof record.answers === 'object' ? { ...record.answers } : {}
+      this.mode = record.mode === 'agent' ? 'agent' : 'qa'
+      storage.set(PROJECT_MODE_KEY, this.mode)
+      const steps = record.answerSteps && typeof record.answerSteps === 'object' ? record.answerSteps : {}
+      this.answerSteps = steps
+      // 每答一题 stepIndex+1，恢复时按已答题数对齐，AI 会接着这个进度往下问
+      this.stepIndex = Object.keys(steps).length
+      this.activeDynamicStep = null
+      this.isAiReady = false
+      this.dynamic12Traits = createInitial12Traits()
+      this.startedAt = Date.now()
+      this.status = 'asking'
+      this.id = uid('sess')
+      this.persistDraft()
+      return true
+    },
+
+    /** 异步把一条消息写进当前项目；失败静默（不打扰聊天节奏） */
+    _syncMessage(m) {
+      if (!m || m.synced || m.streaming) return
+      const text = typeof m.text === 'string' ? m.text.trim() : ''
+      if (!text) return
+      m.synced = true
+      const pid = this.currentProjectId
+      if (!pid) {
+        // 项目还没建好（创建请求在途）：排队，bindProject 时补发
+        pendingMessages.push(m)
+        if (pendingMessages.length > MAX_PENDING_MESSAGES) pendingMessages.shift()
+        return
+      }
+      this._postMessage(pid, m)
+    },
+
+    _postMessage(pid, m) {
+      const role = m.role === 'ai' || m.role === 'system' ? m.role : 'user'
+      const payload = {
+        role,
+        content: String(m.text),
+        stepKey: m.stepId ? String(m.stepId).slice(0, 64) : '',
+        meta: { muted: Boolean(m.muted), edited: Boolean(m.edited) },
+      }
+      // 用户消息顺带把答案快照带上，后端用它刷新项目现场
+      if (role === 'user') {
+        payload.answers = JSON.parse(JSON.stringify(this.answers))
+        payload.answerSteps = JSON.parse(JSON.stringify(this.answerSteps))
+      }
+      projectsApi.appendMessage(pid, payload).catch(() => {})
+    },
+
+    /** 答案快照直接刷后端（咨询改答案等不走消息入口的变更） */
+    _syncProjectSnapshot() {
+      if (!this.currentProjectId) return
+      projectsApi
+        .patch(this.currentProjectId, {
+          answers: JSON.parse(JSON.stringify(this.answers)),
+          answerSteps: JSON.parse(JSON.stringify(this.answerSteps)),
+        })
+        .catch(() => {})
+    },
+
+    /** 截断后的完整消息历史整单回写后端（与本地现场保持一致，防恢复时旧答案复活） */
+    _replaceProjectMessages() {
+      if (!this.currentProjectId) return
+      const messages = this.messages
+        .filter((m) => typeof m.text === 'string' && m.text.trim())
+        .map((m) => ({
+          role: m.role === 'ai' || m.role === 'system' ? m.role : 'user',
+          content: String(m.text),
+          stepKey: m.stepId ? String(m.stepId).slice(0, 64) : '',
+          meta: { muted: Boolean(m.muted), edited: Boolean(m.edited) },
+        }))
+      projectsApi
+        .patch(this.currentProjectId, {
+          answers: JSON.parse(JSON.stringify(this.answers)),
+          answerSteps: JSON.parse(JSON.stringify(this.answerSteps)),
+          messages,
+        })
+        .catch(() => {})
+    },
+
     /** 🌟 Jev 驱动的 12 维动态心意特质后台静默同步与审核入槽 */
     syncDynamicTraits(extractedCandidate = {}, domain = '', suggestedSlots = []) {
       if (!this.dynamic12Traits || this.dynamic12Traits.length !== 12) {
@@ -197,6 +248,7 @@ export const useSessionStore = defineStore('session', {
     pushMessage(msg) {
       const m = { id: uid('msg'), at: Date.now(), ...msg }
       this.messages.push(m)
+      this._syncMessage(m)
       return this.messages[this.messages.length - 1]
     },
 
@@ -205,6 +257,8 @@ export const useSessionStore = defineStore('session', {
       if (target) {
         target.text = newText
         target.streaming = isStreaming
+        // 流式消息在打字结束（isStreaming=false）这一刻才真正落库
+        if (!isStreaming) this._syncMessage(target)
       }
     },
 
@@ -216,6 +270,23 @@ export const useSessionStore = defineStore('session', {
     forceFinish() {
       this.isAiReady = true
       this.persistDraft()
+    },
+
+    /** Agent 闲聊模式：把模型从对话里提炼的画像槽位合并进 answers，并同步后端快照 */
+    mergeAgentSlots(slots) {
+      if (!slots || typeof slots !== 'object' || Array.isArray(slots)) return 0
+      let added = 0
+      for (const [key, value] of Object.entries(slots)) {
+        if (!key || value == null || value === '') continue
+        if (JSON.stringify(this.answers[key]) === JSON.stringify(value)) continue
+        this.answers[key] = value
+        added++
+      }
+      if (added > 0) {
+        this.persistDraft()
+        this._syncProjectSnapshot()
+      }
+      return added
     },
 
     /** 记录一步的回答并前进 */
@@ -278,6 +349,7 @@ export const useSessionStore = defineStore('session', {
         }
       }
       this.persistDraft()
+      this._syncProjectSnapshot()
     },
 
     resumeConsultation() {
@@ -331,9 +403,44 @@ export const useSessionStore = defineStore('session', {
       this.persistDraft()
     },
 
+    /**
+     * 🌟 点气泡改答案：跳到历史任意一题重新作答。
+     * 该题与之后的所有答案一起作废（下游问题是按旧上下文问的，留着会自相矛盾），
+     * 消息流从该题回答气泡处截断，题目本体（含选项）通过 answerSteps 快照原样重新展示。
+     */
+    revisitDynamic(stepId) {
+      const keys = Object.keys(this.answerSteps)
+      const key = keys.find((k) => this.answerSteps[k]?.id === stepId)
+      if (!key) return false
+      const step = this.answerSteps[key]
+      const cutAt = keys.indexOf(key)
+      for (let i = cutAt; i < keys.length; i++) {
+        delete this.answers[keys[i]]
+        delete this.answerSteps[keys[i]]
+      }
+      const firstAnswerIdx = this.messages.findIndex(
+        (m) => m.role === 'user' && m.stepId === stepId && !m.muted
+      )
+      if (firstAnswerIdx >= 0) this.messages.splice(firstAnswerIdx)
+      this.stepIndex = Object.keys(this.answerSteps).length
+      this.activeDynamicStep = step
+      this.isAiReady = false
+      this.status = 'asking'
+      // 作废答案派生出的特质画像一并清零，避免按已丢弃的旧回答推荐
+      this.dynamic12Traits = createInitial12Traits()
+      this.persistDraft()
+      this._syncProjectSnapshot()
+      this._replaceProjectMessages()
+      return true
+    },
+
     reset() {
-      this.$reset()
+      pendingMessages = []
       storage.remove(DRAFT_KEY)
+      storage.remove(PROJECT_KEY)
+      storage.remove(PROJECT_MODE_KEY)
+      // 先删存储再 $reset：initial state 会重新读 storage，顺序不能反
+      this.$reset()
     },
 
     persistDraft() {
@@ -344,6 +451,7 @@ export const useSessionStore = defineStore('session', {
 
       storage.setJSON(DRAFT_KEY, {
         id: this.id,
+        projectId: this.currentProjectId,
         answers: this.answers,
         answerSteps: this.answerSteps,
         stepIndex: this.stepIndex,
@@ -362,12 +470,13 @@ export const useSessionStore = defineStore('session', {
       const restored = {
         ...d,
         answerSteps: d.answerSteps || {},
-        messages: (d.messages || []).map((m) => ({ ...m, streaming: false })),
+        messages: (d.messages || []).map((m) => ({ ...m, streaming: false, synced: true })),
         dynamic12Traits: Array.isArray(d.dynamic12Traits) && d.dynamic12Traits.length === 12
           ? d.dynamic12Traits
           : createInitial12Traits(),
         status: 'asking',
       }
+      if (typeof d.projectId === 'string' && d.projectId) this.bindProject(d.projectId)
       Object.assign(this, restored)
       return true
     },

@@ -3,7 +3,7 @@
  * PlanView —— 方案结果页（交付核心）
  *
  * 自上而下：封面 → AI 洞察 → 四类推荐榜单 → 一封信 → 仪式流程 → 底部操作条。
- * 路由 /plan/:id?：带 id 从 historyStore 取，不带 id 用 planStore.current，两者都没有就回首页。
+ * 路由 /plan/:id?：带 id 等方案库加载完再取（刷新不丢），不带 id 用 planStore.current。
  */
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -30,16 +30,20 @@ const ui = useUiStore()
 
 /* ── 取方案 ───────────────────────────────── */
 const routeId = String(route.params.id || '')
-if (routeId) {
-  const saved = historyStore.get(routeId)
-  if (saved) planStore.setCurrent(saved)
-}
 
 // 重新策划时先离开页面，等组件真正销毁再清 store，避免转场里闪一下空页
 const restarting = ref(false)
 const plan = computed(() => planStore.current)
 
 const backTo = computed(() => (routeId ? '/history' : '/'))
+
+/* ── 继续完善：带项目现场回问答，接着上次的回答改 ── */
+const canPolish = computed(() => Boolean(plan.value?.projectId))
+function continuePolish() {
+  moreOpen.value = false
+  const pid = plan.value?.projectId
+  if (pid) router.push(`/chat?project=${pid}`)
+}
 
 /* ── 内容（全部带兜底，任何字段缺失都不显示 undefined） ── */
 function text(v) {
@@ -486,7 +490,13 @@ function onScroll() {
   rafId = requestAnimationFrame(update)
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 带 id 进来（方案库点进来的）：等列表加载完再取，直接刷新也不会丢
+  if (routeId) {
+    await historyStore.ensureLoaded()
+    const saved = historyStore.get(routeId)
+    if (saved) planStore.setCurrent(saved)
+  }
   if (!planStore.current) {
     router.replace('/')
     return
@@ -545,6 +555,11 @@ onUnmounted(() => {
             <span class="meta__v">{{ m.v }}</span>
           </li>
         </ul>
+
+        <button v-if="canPolish" class="polish-link tap" type="button" @click="continuePolish">
+          继续完善这份方案
+          <GIcon name="chevron" :size="14" />
+        </button>
       </header>
 
       <!-- ══ 内容纸面 ══ -->
@@ -726,6 +741,16 @@ onUnmounted(() => {
     <!-- ══ 更多操作 ══ -->
     <GSheet v-model="moreOpen" title="方案选项与操作">
       <ul class="acts">
+        <li v-if="canPolish">
+          <button class="act tap" type="button" @click="continuePolish">
+            <span class="act__icon"><GIcon name="refresh" :size="18" /></span>
+            <span class="act__text">
+              <span class="act__title">继续完善</span>
+              <span class="act__desc">接着之前的回答继续聊，改条件重新生成</span>
+            </span>
+            <GIcon name="chevron" :size="16" />
+          </button>
+        </li>
         <li>
           <button class="act tap" type="button" @click="onCopyPlan">
             <span class="act__icon"><GIcon name="copy" :size="18" /></span>
@@ -1251,6 +1276,21 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--c-surface) 72%, transparent);
   color: var(--c-ink-3);
   font-size: var(--fs-micro);
+}
+
+/* 继续完善：带项目现场回问答接着改 */
+.polish-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: var(--s-4);
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  background: var(--c-surface);
+  box-shadow: var(--sh-1), inset 0 0 0 1px var(--c-rose-soft);
+  color: var(--c-rose-deep);
+  font-size: var(--fs-caption);
+  font-weight: 500;
 }
 .replace-reasons {
   display: flex;

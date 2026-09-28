@@ -151,6 +151,23 @@ export async function extractSlotsFromFreeText(text = '', currentAnswers = {}) {
   return { slots: fallbackSlots, keywords }
 }
 
+/** 选项出闸统一清洗：剥解释后缀、label 严格 10 字内、补 value/desc/emoji；不改写模型措辞 */
+const cleanStr = (s) => (typeof s === 'string' ? s.trim() : '')
+
+function cleanCandidateOption(opt) {
+  let label = cleanStr(opt.label) || cleanStr(opt.value)
+  // 剥离冒号、破折号或括号后的长串举例与解释，确保选项精炼干净
+  label = label.replace(/[：:][^]*$/, '').replace(/\([^)]*\)/g, '').replace(/（[^）]*）/g, '').trim()
+  if (label.includes(' / ')) label = label.split(' / ')[0].trim()
+  // 严格保证在 10 个字以内
+  if (label.length > 10) {
+    label = label.slice(0, 10).trim()
+  }
+  const value = cleanStr(opt.value) || label
+  const desc = cleanStr(opt.desc || opt.hint)
+  return { label, value, desc, hint: desc, emoji: cleanStr(opt.emoji) }
+}
+
 /** 模型自主理解上下文并决定追问或收尾；双轨解耦：模型专注买手交流并提取特质，Jev 负责审核入槽与选项归类。 */
 export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [], stepIndex = 1, currentTraits = [], answeredSteps = {}, pace = 'normal') {
   // 还原「stepId → 当轮题目与回答键」索引，把每轮实际提供的选项与用户完整选择一并交给模型，避免它凭碎片猜测
@@ -207,7 +224,7 @@ export async function fetchNextDynamicQuestion(answers = {}, historyMessages = [
 7. 承接选择须完整：用户点选的选项若包含多个并列要点（如"影音"中的"音"与"影"），每个要点都是后续选品要兑现的承诺；推进任一分支前，须确认其余分支已被顾及或分流给用户，不得静默丢弃其中任何一部分。
 8. 这是供你权衡的思路，不是逐项完成的清单。
 
-为了界面渲染，请返回 JSON 对象。isReady 表示是否进入确认；继续交流时 messages 为你要说的话组成的字符串数组，key 为本轮记录标识。options 为候选回答数组，请放开想到 8~10 个（多想比少想好），尽量覆盖当前方向下不同的细分方向与生活方式，相近的候选可以并存（稍后会统一归类收敛，不必自己压缩数量）；每项 label 简练易读（严格控制在 10 个字以内），严禁在选项文字后追加冒号、括号或大段举例说明；选项依据对话中已知的关于 TA 的真实信息设置，不了解 TA 的兴趣时宁宽勿窄，按性别或关系去套常见喜好比漏掉 TA 真正的爱好更糟；value 为用户选中后提交的回答文本，须完整自包含、涵盖该选项要表达的全部要点，可附 emoji。type 可为 single、multi 或 text。内容、数量和组织方式由你决定。options_need_explain 仅当本轮选项是并列的具体品牌、型号或款式名（用户需要先弄清差异才好下手选）时为 true，界面会据此附加一个"讲讲区别"讲解入口；方向类、程度类、场景类等常规选项一律不填或置 false。`
+为了界面渲染，请返回 JSON 对象。isReady 表示是否进入确认；继续交流时 messages 为你要说的话组成的字符串数组，key 为本轮记录标识。options 为候选回答数组，请放开想到 8~10 个（多想比少想好），尽量覆盖当前方向下不同的细分方向与生活方式，相近的候选可以并存（稍后会统一归类收敛，不必自己压缩数量）；每项 label 简练易读（严格控制在 10 个字以内），严禁在选项文字后追加冒号、括号或大段举例说明；出选项前先过一道自检：本轮选项呈现的生活方式图景，是否依赖某个你尚未向用户确认的 TA 关键状态（日常节奏、人生阶段、关系分寸、使用场景等）？若该状态未知、选项只能按人群刻板印象凑齐（看似好几个方向、实则同一场景），本轮就改问该状态本身、用它的合理分档作选项，确认后再回到原题，不得把整题建立在未确认的假设上。选项依据对话中已知的关于 TA 的真实信息设置，不了解 TA 的兴趣时宁宽勿窄，「宽」指横跨不同的真实生活场景而非同一场景内堆砌多项；按性别或关系去套常见喜好比漏掉 TA 真正的爱好更糟；value 为用户选中后提交的回答文本，须完整自包含、涵盖该选项要表达的全部要点，可附 emoji。type 默认一律 single：绝大多数决策点选一个就够；只有"多个并列要素确需同时成立"时才可用 multi（拿不准就宁拆成先后两轮单选，也别轻易一次多选），适合直接描述细节时用 text。内容、数量和组织方式由你决定。options_need_explain 仅当本轮选项是并列的具体品牌、型号或款式名（用户需要先弄清差异才好下手选）时为 true，界面会据此附加一个"讲讲区别"讲解入口；方向类、程度类、场景类等常规选项一律不填或置 false。`
 
   // 🌟 加速模式：用户主动要求加快进度时，只问关键项并尽快收敛进确认页
   if (pace === 'fast') {
@@ -255,7 +272,6 @@ ${JSON.stringify(answers, null, 2)}
       }
 
       // 只校验可显示的类型，不改写模型措辞。
-      const cleanStr = (s) => (typeof s === 'string' ? s.trim() : '')
       const cleanedMessages = (Array.isArray(parsed.messages) ? parsed.messages : [parsed.messages])
         .map(cleanStr)
         .filter(Boolean)
@@ -268,19 +284,7 @@ ${JSON.stringify(answers, null, 2)}
 
       const cleanedOptions = (Array.isArray(parsed.options) ? parsed.options : [])
         .filter((opt) => opt && typeof opt === 'object')
-        .map((opt) => {
-          let label = cleanStr(opt.label) || cleanStr(opt.value)
-          // 剥离冒号、破折号或括号后的长串举例与解释，确保选项精炼干净
-          label = label.replace(/[：:][^]*$/, '').replace(/\([^)]*\)/g, '').replace(/（[^）]*）/g, '').trim()
-          if (label.includes(' / ')) label = label.split(' / ')[0].trim()
-          // 严格保证在 10 个字以内
-          if (label.length > 10) {
-            label = label.slice(0, 10).trim()
-          }
-          const value = cleanStr(opt.value) || label
-          const desc = cleanStr(opt.desc || opt.hint)
-          return { label, value, desc, hint: desc, emoji: cleanStr(opt.emoji) }
-        })
+        .map(cleanCandidateOption)
         .filter((opt) => opt.label && opt.value)
       // 封顶 6 个，但"其他/自定义"兜底项永不被挤掉
       const options = capOptionsWithCustomGuard(cleanedOptions, 6)

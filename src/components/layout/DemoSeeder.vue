@@ -105,13 +105,16 @@ function seed() {
       }
       const plan = generateMockPlan(answers)
       const updatedAt = now - demo.ago - n * 3 * DAY - i * 60 * 1000
-      history.save({
-        id: uid('plan'),
-        createdAt: updatedAt - 42 * 60 * 1000,
-        updatedAt,
-        answers,
-        ...plan,
-      })
+      history.save(
+        {
+          id: uid('plan'),
+          createdAt: updatedAt - 42 * 60 * 1000,
+          updatedAt,
+          answers,
+          ...plan,
+        },
+        { localOnly: true },
+      )
       ok += 1
     } catch {
       /* 单条失败不影响其余的 */

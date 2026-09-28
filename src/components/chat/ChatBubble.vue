@@ -13,7 +13,10 @@ defineProps({
   muted: Boolean, // 「跳过」这类弱化气泡
   tight: Boolean, // 紧凑内边距
   streaming: Boolean, // 是否正在逐字流式打字中
+  editable: Boolean, // 用户自己的历史回答可点击修改
 })
+
+defineEmits(['edit'])
 </script>
 
 <template>
@@ -22,9 +25,10 @@ defineProps({
       <GIcon name="sparkle" :size="13" :stroke="1.8" />
     </div>
 
-    <div class="bubble" :class="{ muted, tight, 'is-streaming': streaming }">
+    <div class="bubble" :class="{ muted, tight, 'is-streaming': streaming, 'is-editable': editable }" @click="editable && $emit('edit')">
       <slot>{{ text }}</slot>
       <span v-if="streaming" class="typing-cursor" aria-hidden="true"></span>
+      <span v-if="editable" class="bubble__edit-hint" aria-hidden="true">✎ 改</span>
     </div>
   </div>
 </template>
@@ -90,6 +94,29 @@ defineProps({
 .bubble.muted {
   opacity: 0.6;
   font-style: italic;
+}
+
+/* ── 可编辑的历史回答（点气泡改答案） ────────── */
+.bubble.is-editable {
+  cursor: pointer;
+}
+.bubble.is-editable:active {
+  opacity: 0.85;
+}
+.bubble__edit-hint {
+  position: absolute;
+  left: -8px;
+  bottom: -9px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--c-paper);
+  border: 1px solid var(--c-border);
+  color: var(--c-ink-2);
+  font-size: 10px;
+  line-height: 1.4;
+  box-shadow: var(--sh-1);
+  pointer-events: none;
+  white-space: nowrap;
 }
 .bubble.tight {
   padding: 8px 12px;

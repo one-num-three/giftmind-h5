@@ -20,16 +20,22 @@ const router = useRouter()
 const session = useSessionStore()
 const planStore = usePlanStore()
 const ui = useUiStore()
-const { typing, speedMode, toggleSpeedMode, paceMode, togglePaceMode, submit, skipStep, goBack, defer } = useChatFlow()
+const { typing, speedMode, toggleSpeedMode, paceMode, togglePaceMode, submit, skipStep, goBack, editAnswer, agentChips, agentSend, requestPlan, defer } = useChatFlow()
 
 const streamRef = ref(null)
 const footRef = ref(null)
 const exitOpen = ref(false)
+/** 点气泡改答案：待确认的目标消息与确认弹层 */
+const editOpen = ref(false)
+const editTarget = ref(null)
 /** 由「或者自己说…」进入的自由输入态 */
 const customMode = ref(false)
 const customBase = ref([])
 
 const step = computed(() => session.currentStep)
+
+/** Agent 闲聊模式：无问卷步骤，常驻输入 + 用户点按钮出方案 */
+const isAgent = computed(() => session.mode === 'agent')
 
 /** 这一题的提问已经落到消息流里了吗？没问完就不给交互区 */
 const asked = computed(() => {
@@ -55,6 +61,9 @@ const mode = computed(() => {
 const voiceAvailable = computed(() => isMock || Boolean(planStore.serviceStatus?.voiceConfigured))
 
 /* ── 消息流 ───────────────────────────────────── */
+/** 已作答的步骤 id 集合：自己的历史回答气泡才可点改 */
+const answeredStepIds = computed(() => new Set(Object.values(session.answerSteps || {}).map((s) => s && s.id)))
+
 const bubbles = computed(() =>
   session.messages.filter((m) => m.role !== 'system').map((m, i, arr) => {
     const role = m.role === 'user' ? 'user' : 'ai'
@@ -68,9 +77,34 @@ const bubbles = computed(() =>
       avatar: role === 'ai' && lead, // 连发的 AI 消息只有第一条露头像
       spaced: lead && i > 0,
       streaming: Boolean(m.streaming),
+      editable: role === 'user' && !m.muted && !m.streaming && answeredStepIds.value.has(m.stepId) && !typing.value,
     }
   }),
 )
+
+/** 修改目标题的题目文案（确认弹层里提示用户改的是哪题） */
+const editQuestionText = computed(() => {
+  const msg = editTarget.value
+  if (!msg) return ''
+  const step = Object.values(session.answerSteps || {}).find((s) => s?.id === msg.stepId)
+  const q = (step?.messages || []).filter((t) => typeof t === 'string' && t.trim()).join(' ')
+  return q ? (q.length > 40 ? `${q.slice(0, 40)}…` : q) : ''
+})
+
+function onBubbleEdit(id) {
+  if (typing.value) return
+  const msg = session.messages.find((m) => m.id === id)
+  if (!msg || msg.role !== 'user' || msg.muted) return
+  editTarget.value = msg
+  editOpen.value = true
+}
+
+function confirmEdit() {
+  const msg = editTarget.value
+  editOpen.value = false
+  editTarget.value = null
+  if (msg) editAnswer(msg)
+}
 
 /** 打字气泡是不是一段 AI 发言的开头 */
 const typingLeads = computed(() => {
@@ -84,7 +118,7 @@ function scrollToBottom(smooth = true) {
   el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
 }
 
-watch([() => session.messages.length, typing, mode], () => {
+watch([() => session.messages.length, typing, mode, agentChips], () => {
   nextTick(() => scrollToBottom(true))
 })
 
@@ -127,6 +161,17 @@ function onComposerSubmit(text) {
 
   // 长文本后台静默辅助解析，绝不卡住主线程交互
   // 原文已经进入会话；不再异步回填推测槽位，避免覆盖后续纠正或改变轮次。
+}
+
+/* ── Agent 闲聊模式 ── */
+function onAgentSubmit(text) {
+  agentSend(text)
+}
+function onAgentChip(chip) {
+  if (chip?.label) agentSend(chip.label)
+}
+function onPlanClick() {
+  requestPlan()
 }
 
 /** 键盘弹起后把输入区顶到可见位置 */
@@ -190,7 +235,7 @@ onUnmounted(() => {
 <template>
   <div class="page chat">
     <div class="chat__top">
-      <GProgress :value="session.progress" />
+      <GProgress v-if="!isAgent" :value="session.progress" />
     </div>
 
     <header class="chat__head">
@@ -207,9 +252,9 @@ onUnmounted(() => {
         <span class="chat__ai-engine-tag" title="DeepSeek Flash (v4代经济型实时思考引擎已就绪)">DeepSeek Flash</span>
       </div>
       <div class="chat__head-right">
-        <!-- ↩ 返回上一题（重新选择上一题的答案） -->
+        <!-- ↩ 返回上一题（重新选择上一题的答案），Agent 闲聊无题目可退 -->
         <button
-          v-if="session.stepIndex > 0"
+          v-if="!isAgent && session.stepIndex > 0"
           class="chat__prev-btn tap"
           type="button"
           aria-label="返回上一题"
@@ -231,33 +276,33 @@ onUnmounted(() => {
           <span v-else>☕ 沉浸</span>
         </button>
 
+        <!-- 🎁 Agent 闲聊：只有用户点按钮才生成方案（AI 绝不主动提） -->
         <button
-          v-if="session.stepIndex >= 2"
-          class="chat__quick-btn tap"
-          :class="{ 'chat__quick-btn--active': paceMode === 'fast' }"
+          v-if="isAgent"
+          class="chat__plan-btn tap"
           type="button"
-          :title="paceMode === 'fast' ? '已加速：只问关键项，点击恢复细致追问' : '等不及了？点击加速，之后只问关键问题、大幅拉快进度'"
-          @click="togglePaceMode"
+          :disabled="typing || planStore.generating"
+          :title="typing ? '等对方说完再点～' : '觉得聊得差不多了？点我生成方案'"
+          @click="onPlanClick"
         >
-          <span v-if="paceMode === 'fast'">🐢 恢复细致</span>
-          <span v-else>⏩ 快点问</span>
+          🎁 生成方案
         </button>
-        <div v-else class="chat__stage">{{ session.stageText }}</div>
+        <template v-else>
+          <button
+            v-if="session.stepIndex >= 2"
+            class="chat__quick-btn tap"
+            :class="{ 'chat__quick-btn--active': paceMode === 'fast' }"
+            type="button"
+            :title="paceMode === 'fast' ? '已加速：只问关键项，点击恢复细致追问' : '等不及了？点击加速，之后只问关键问题、大幅拉快进度'"
+            @click="togglePaceMode"
+          >
+            <span v-if="paceMode === 'fast'">🐢 恢复细致</span>
+            <span v-else>⏩ 快点问</span>
+          </button>
+          <div v-else class="chat__stage">{{ session.stageText }}</div>
+        </template>
       </div>
     </header>
-
-    <!-- 🌟 心理学与买手人情动态洞察画像徽标栏 -->
-    <div v-if="session.insightBadges && session.insightBadges.length" class="chat__badges scroll-x">
-      <div
-        v-for="badge in session.insightBadges"
-        :key="badge.text"
-        class="chat__badge-tag"
-        :class="`chat__badge--${badge.tone}`"
-      >
-        <span class="chat__badge-icon">{{ badge.icon }}</span>
-        <span class="chat__badge-text">{{ badge.text }}</span>
-      </div>
-    </div>
 
     <div ref="streamRef" class="chat__stream scroll-y">
       <div class="chat__list">
@@ -270,6 +315,8 @@ onUnmounted(() => {
           :spaced="b.spaced"
           :muted="b.muted"
           :streaming="b.streaming"
+          :editable="b.editable"
+          @edit="onBubbleEdit(b.id)"
         />
         <ChatBubble
           v-if="typing"
@@ -284,8 +331,29 @@ onUnmounted(() => {
     </div>
 
     <div ref="footRef" class="chat__foot">
+      <!-- 🌙 Agent 闲聊模式：常驻输入框 + 模型随缘给的可点方向 -->
+      <template v-if="isAgent">
+        <div v-if="agentChips.length && !typing" class="chat__chips">
+          <button
+            v-for="(chip, idx) in agentChips"
+            :key="`${idx}-${chip.label}`"
+            type="button"
+            class="chat__chip tap"
+            @click="onAgentChip(chip)"
+          >
+            {{ chip.label }}
+          </button>
+        </div>
+        <ChatComposer
+          :placeholder="typing ? '对方正在输入…' : '想到什么说什么…'"
+          :voice="voiceAvailable"
+          @submit="onAgentSubmit"
+          @focus="onComposerFocus"
+          @voice-error="(message) => ui.error(message)"
+        />
+      </template>
       <ChoicePanel
-        v-if="mode === 'choice'"
+        v-else-if="mode === 'choice'"
         :key="`choice-${step.id}`"
         class="anim-up"
         :step="step"
@@ -324,6 +392,19 @@ onUnmounted(() => {
         </div>
       </template>
     </GSheet>
+
+    <GSheet v-model="editOpen" title="修改这题的回答？">
+      <p class="exit__desc">
+        <template v-if="editQuestionText">「{{ editQuestionText }}」</template>
+        改完后，这题后面的问答都会作废，从这里重新往下聊。
+      </p>
+      <template #footer>
+        <div class="exit__acts">
+          <GButton variant="outline" block @click="editOpen = false">再想想</GButton>
+          <GButton variant="dark" block @click="confirmEdit">修改这题</GButton>
+        </div>
+      </template>
+    </GSheet>
   </div>
 </template>
 
@@ -351,53 +432,6 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* ── 顶部人情画像徽标栏 ── */
-.chat__badges {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  padding: 6px var(--s-3) 8px;
-  background: var(--c-paper);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-  white-space: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  flex-shrink: 0;
-}
-.chat__badges::-webkit-scrollbar {
-  display: none;
-}
-.chat__badge-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 500;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  color: #555;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  transition: all 0.2s ease;
-}
-.chat__badge--work { background: rgba(30, 41, 59, 0.06); color: #1e293b; border-color: rgba(30, 41, 59, 0.15); }
-.chat__badge--love { background: rgba(236, 72, 153, 0.08); color: #be185d; border-color: rgba(236, 72, 153, 0.2); }
-.chat__badge--elder { background: rgba(217, 119, 6, 0.08); color: #b45309; border-color: rgba(217, 119, 6, 0.2); }
-.chat__badge--kid { background: rgba(59, 130, 246, 0.08); color: #1d4ed8; border-color: rgba(59, 130, 246, 0.2); }
-.chat__badge--friend { background: rgba(16, 185, 129, 0.08); color: #047857; border-color: rgba(16, 185, 129, 0.2); }
-.chat__badge--tea { background: rgba(16, 185, 129, 0.08); color: #047857; border-color: rgba(16, 185, 129, 0.2); }
-.chat__badge--outdoor { background: rgba(245, 158, 11, 0.08); color: #b45309; border-color: rgba(245, 158, 11, 0.2); }
-.chat__badge--nature { background: rgba(101, 163, 13, 0.08); color: #4d7c0f; border-color: rgba(101, 163, 13, 0.2); }
-.chat__badge--desk { background: rgba(100, 116, 139, 0.08); color: #334155; border-color: rgba(100, 116, 139, 0.2); }
-.chat__badge--travel { background: rgba(14, 165, 233, 0.08); color: #0369a1; border-color: rgba(14, 165, 233, 0.2); }
-.chat__badge--black { background: rgba(15, 23, 42, 0.08); color: #0f172a; border-color: rgba(15, 23, 42, 0.2); }
-.chat__badge--classic { background: rgba(120, 53, 15, 0.08); color: #78350f; border-color: rgba(120, 53, 15, 0.2); }
-.chat__badge--quick { background: rgba(13, 148, 136, 0.08); color: #0f766e; border-color: rgba(13, 148, 136, 0.2); }
-.chat__badge--ritual { background: rgba(147, 51, 234, 0.08); color: #7e22ce; border-color: rgba(147, 51, 234, 0.2); }
-.chat__badge--ease { background: rgba(37, 99, 235, 0.08); color: #1d4ed8; border-color: rgba(37, 99, 235, 0.2); }
-.chat__badge--respect { background: rgba(225, 29, 72, 0.08); color: #be123c; border-color: rgba(225, 29, 72, 0.2); }
-.chat__badge--budget { background: rgba(234, 88, 12, 0.08); color: #c2410c; border-color: rgba(234, 88, 12, 0.2); }
 .chat__back {
   width: 44px;
   height: 44px;
@@ -558,6 +592,40 @@ onUnmounted(() => {
 }
 .chat__idle {
   height: 54px;
+}
+.chat__plan-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f59e0b 0%, #f43f5e 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.3);
+  cursor: pointer;
+}
+.chat__plan-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.chat__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.chat__chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #1c1917;
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
 }
 
 /* ── 退出确认 ─────────────────────────────── */
